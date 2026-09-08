@@ -1,0 +1,61 @@
+{
+    "name": "stm32-flash-button",
+    "displayName": "STM32 一键编译烧录",
+    "description": "状态栏一键『编译并烧录』：自动探测工具与固件，命令与报错输出到集成终端",
+    "version": "1.0.0",
+    "publisher": "local",
+    "license": "MIT",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "stm32",
+        "flash",
+        "build",
+        "cmake"
+    ],
+    "activationEvents": [
+        "onCommand:stm32.flashAndBuild",
+        "onCommand:stm32.diag",
+        "onCommand:stm32.configureTools",
+        "workspaceContains:**/*.ioc",
+        "workspaceContains:**/CMakeLists.txt",
+        "workspaceContains:**/CMakePresets.json"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "stm32.flashAndBuild",
+                "title": "STM32: 一键编译并烧录"
+            },
+            {
+                "command": "stm32.diag",
+                "title": "STM32: 终端自检(工具识别)"
+            },
+            {
+                "command": "stm32.configureTools",
+                "title": "STM32: 打开 settings.json 配置工具路径"
+            }
+        ],
+        "configuration": {
+            "title": "STM32 一键编译烧录",
+            "properties": {
+                "stm32flash.programmer": {
+                    "type": "string",
+                    "default": "",
+                    "description": "可选：手动指定 STM32CubeProgrammer CLI 绝对路径"
+                },
+                "stm32flash.toolchainDirs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "description": "可选：手动指定 cmake/ninja/gcc 所在目录"
+                }
+            }
+        }
+    }
+}
