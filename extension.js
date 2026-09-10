@@ -11,12 +11,24 @@ const EXE = IS_WIN ? '.exe' : '';
 const TERM_NAME = 'STM32 编译烧录';
 
 /* ================= 工具探测 ================= */
+// 各平台 ST 工具 bundles 常见位置（Windows / macOS / Linux，目录名常带版本号）
 function bundlesRoots() {
     const r = [];
+    const home = os.homedir();
     if (process.env.LOCALAPPDATA) r.push(path.join(process.env.LOCALAPPDATA, 'stm32cube', 'bundles'));
-    r.push(path.join(os.homedir(), 'AppData', 'Local', 'stm32cube', 'bundles'));
-    r.push(path.join(os.homedir(), '.stm32cube', 'bundles'));
-    r.push('/opt/st/stm32cubeide/bundles');
+    r.push(path.join(home, 'AppData', 'Local', 'stm32cube', 'bundles'));          // Windows 兜底
+    r.push(path.join(home, '.stm32cube', 'bundles'));                             // Linux/通用
+    r.push(path.join(home, '.local', 'share', 'stm32cube', 'bundles'));           // Linux XDG
+    r.push(path.join(home, 'Library', 'Application Support', 'stm32cube', 'bundles')); // macOS
+    r.push(path.join(home, 'Library', 'stm32cube', 'bundles'));                   // macOS 备选
+    r.push('/Applications/STM32CubeIDE.app/Contents/Eclipse/bundles');            // macOS CubeIDE
+    r.push('/opt/st/stm32cubeide/bundles');                                      // Linux CubeIDE
+    try {
+        for (const e of fs.readdirSync('/opt/st', { withFileTypes: true })) {
+            if (e.isDirectory() && e.name.indexOf('stm32cubeide') === 0)
+                r.push(path.join('/opt/st', e.name, 'bundles'));                 // 带版本号目录
+        }
+    } catch (_) { }
     return [...new Set(r)];
 }
 function existsInPath(f) {
@@ -26,30 +38,58 @@ function existsInPath(f) {
     }
     return null;
 }
-function find(root, name, depth) {
-    if (depth < 0 || !root) return null;
-    let es; try { es = fs.readdirSync(root, { withFileTypes: true }); } catch (_) { return null; }
+// 单次递归收集所有目标文件名（深度 6：兼容 .app / 深层嵌套；一次遍历供四项工具共用）
+function collectNames(root, names, depth, out) {
+    if (depth < 0 || !root) return;
+    let es; try { es = fs.readdirSync(root, { withFileTypes: true }); } catch (_) { return; }
     for (const e of es) {
         const p = path.join(root, e.name);
-        if (e.isDirectory()) { const x = find(p, name, depth - 1); if (x) return x; }
-        else if (e.name === name) return p;
+        if (e.isDirectory()) collectNames(p, names, depth - 1, out);
+        else if (names.has(e.name)) out.push(p);
     }
-    return null;
+}
+// 从路径的目录名里提取版本号（如 4.2.3+st.1 / 2.23.0），用于在同名工具的多个版本中选最新的
+// 只认形如 “数字.数字[.数字...] [+后缀]” 的目录名，避免把用户名(18298)或 STM32 里的数字误当版本
+function versionOf(p) {
+    let best = [0];
+    for (const seg of String(p).split(/[\\/]/)) {
+        const m = seg.match(/^(\d+(?:\.\d+)+)(?:[+\-][0-9A-Za-z._]*)?$/);
+        if (!m) continue;
+        const arr = m[1].split('.').map(Number);
+        if (cmpVersion(arr, best) > 0) best = arr;
+    }
+    return best;
+}
+function cmpVersion(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] || 0, y = b[i] || 0;
+        if (x !== y) return x - y;
+    }
+    return 0;
+}
+function newest(paths) {
+    return paths.slice().sort((a, b) => cmpVersion(versionOf(b), versionOf(a)))[0] || null;
 }
 function userDirs() { try { return vscode.workspace.getConfiguration('stm32flash').get('toolchainDirs', []); } catch (_) { return []; } }
-function resolveTool(kinds) {
+function resolveTool(kinds, bundleHits) {
     for (const d of userDirs()) if (d) for (const n of kinds) { try { if (fs.existsSync(path.join(d, n))) return path.join(d, n); } catch (_) { } }
     for (const n of kinds) { const p = existsInPath(n); if (p) return p; }
-    for (const root of bundlesRoots()) { if (!fs.existsSync(root)) continue; for (const n of kinds) { const r = find(root, n, 3); if (r) return r; } }
-    return null;
+    return newest((bundleHits || []).filter(p => kinds.indexOf(path.basename(p)) >= 0));
 }
 function detectTools() {
-    return {
-        cmake: resolveTool(['cmake' + EXE]),
-        ninja: resolveTool(['ninja' + EXE]),
-        gcc: resolveTool(['arm-none-eabi-gcc' + EXE]),
-        programmer: resolveTool(['STM32_Programmer_CLI' + EXE, 'STM32CubeProgrammer' + EXE]),
+    const want = {
+        cmake: ['cmake' + EXE],
+        ninja: ['ninja' + EXE],
+        gcc: ['arm-none-eabi-gcc' + EXE],
+        programmer: ['STM32_Programmer_CLI' + EXE, 'STM32CubeProgrammer' + EXE],
     };
+    const names = new Set();
+    for (const k of Object.keys(want)) for (const n of want[k]) names.add(n);
+    const hits = [];
+    for (const root of bundlesRoots()) { if (fs.existsSync(root)) collectNames(root, names, 6, hits); }
+    const out = {};
+    for (const k of Object.keys(want)) out[k] = resolveTool(want[k], hits);
+    return out;
 }
 
 /* ================= 产物 / 构建目录 ================= */
@@ -73,7 +113,8 @@ async function findBuildDir() {
 // 关键：VS Code 集成终端默认用用户的 shell（可能是 PowerShell，不支持 && 与引号调用）。
 // 为保证命令可执行，统一使用我们指定的 shell：Windows = cmd.exe，其它 = /bin/bash。
 function shellPath() {
-    return IS_WIN ? (process.env.ComSpec || 'cmd.exe') : '/bin/bash';
+    if (IS_WIN) return process.env.ComSpec || 'cmd.exe';
+    return fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';   // 极简 Linux 可能没有 bash
 }
 function getTerm() {
     const old = vscode.window.terminals.find(x => x.name === TERM_NAME);
@@ -85,7 +126,8 @@ function getTerm() {
 // 提示 / 错误行：按 shell 转义，避免 PowerShell 等解析报错
 function termLine(t, s) {
     if (IS_WIN) {
-        const esc = s.replace(/\^/g, '^^').replace(/[&|<>()%!]/g, m => '^' + m);
+        // 注意：cmd 的 echo 里 % 无法用 ^ 转义，直接换成全角字符，避免提示文本显示异常
+        const esc = s.replace(/\^/g, '^^').replace(/%/g, '％').replace(/[&|<>()!]/g, m => '^' + m);
         t.sendText('echo ' + esc, true);
     } else {
         const esc = s.replace(/'/g, `'\''`);
@@ -175,3 +217,5 @@ function activate(context) {
 }
 function deactivate() { }
 module.exports = { activate, deactivate };
+// 便于命令行/CI 自检（VS Code 运行时不使用）
+module.exports._internals = { detectTools, bundlesRoots, resolveTool, versionOf };

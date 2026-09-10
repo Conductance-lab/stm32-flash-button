@@ -22,7 +22,8 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 | **arm-none-eabi-gcc** | ARM 交叉编译器 | 官方 bundles / 自装 |
 | **STM32CubeProgrammer (CLI)** | 烧录器（`STM32_Programmer_CLI`） | 官方 bundles / 自装 |
 
-> 装了官方扩展后，这些工具通常位于 `%LOCALAPPDATA%\stm32cube\bundles\`，插件会自动递归探测；
+> 装了官方扩展后，这些工具通常位于 `%LOCALAPPDATA%\stm32cube\bundles\`（Windows）；
+> macOS / Linux 的常见位置插件也会自动探测，会递归查找并优先选最新版本。
 > 没装官方扩展时，请把上述工具加入系统 `PATH`，或用下面的设置手动指定。
 
 ## 特性
@@ -32,11 +33,20 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 - 结果 / 报错输出到集成终端「STM32 编译烧录」，可直接复制给 AI / 人工分析
 
 ## 安装
-从本仓库 **Releases** 下载 `stm32-flash-button-1.0.0.vsix`，然后：
-```bash
-code --install-extension stm32-flash-button-1.0.0.vsix
+
+**Windows（PowerShell，一键）：**
+```powershell
+iwr "https://github.com/Conductance-lab/stm32-flash-button/releases/latest/download/stm32-flash-button.vsix" -OutFile "$env:TEMP\stm32-flash-button.vsix"; code --install-extension "$env:TEMP\stm32-flash-button.vsix"
 ```
-或 VS Code 扩展面板 → `...` → 从 VSIX 安装。
+
+**macOS / Linux：**
+```bash
+curl -L -o /tmp/stm32-flash-button.vsix "https://github.com/Conductance-lab/stm32-flash-button/releases/latest/download/stm32-flash-button.vsix"
+code --install-extension /tmp/stm32-flash-button.vsix
+```
+
+也可从本仓库 **Releases** 手动下载 `stm32-flash-button.vsix`，或在 VS Code 扩展面板 → `...` → 从 VSIX 安装。
+> VSIX 安装的插件不会自动更新，重新执行一次上面的命令即可覆盖升级。
 
 ## 使用
 1. 先安装 ST 官方扩展并打开 STM32 CMake 工程（含 `CMakeLists.txt`，且/或含任意 `*.ioc` / `CMakePresets.json`）
@@ -58,6 +68,9 @@ code --install-extension stm32-flash-button-1.0.0.vsix
 配置后重新点击按钮即可。
 
 ## 常见问题
-- 未识别到工具 → 先确认已装 ST 官方扩展，或手动配置上面设置
+- 未识别到工具 → 先确认已装 ST 官方扩展，或手动配置上面设置；自检用 `STM32: 终端自检(工具识别)`
+- 同一工具存在多个版本 → 插件会自动选版本号最高的那个
+- macOS / Linux 未识别到工具 → 官方工具包位置较分散，建议在设置里手动指定路径
+- 插件不自动更新 → 重新执行安装命令即可覆盖升级
 - 烧录 `Unable to get core ID` → 板子独立供电 / SWD 接线共地 / 或 CubeMX 的 SYS→Debug 设成了 `No Debug`（会关闭 SWD），此时把 BOOT0 拨到 1 可恢复连接
 
