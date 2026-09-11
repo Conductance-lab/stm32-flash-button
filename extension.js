@@ -137,6 +137,34 @@ function termLine(t, s) {
 function termClear(t) { t.sendText(IS_WIN ? 'cls' : 'clear', true); }
 function termCmd(t, s) { t.sendText(s); }   // 真实命令（cmd/bash 均支持 && 与引号路径）
 
+/* ================= 保存未保存的更改 ================= */
+// 编译/烧录前先把编辑器里所有未保存的更改写盘，避免构建用的是磁盘上的旧代码
+// 返回 true = 已全部保存（或本来就没有脏文件）；false = 有文件保存失败，应中止流程
+async function saveAllBeforeBuild(term) {
+    const dirty = vscode.workspace.textDocuments.filter(d => d.isDirty);
+    if (!dirty.length) { termLine(term, '[STM32] 保存检查: 没有未保存的更改'); return true; }
+
+    const onDisk = dirty.filter(d => d.uri.scheme === 'file');
+    const untitled = dirty.filter(d => d.uri.scheme !== 'file');
+    for (const d of onDisk) { try { await d.save(); } catch (_) { } }
+
+    // 复核：仍为脏的文件即为保存失败（如只读 / 被占用 / 有冲突）
+    const failed = vscode.workspace.textDocuments.filter(d => d.isDirty && d.uri.scheme === 'file');
+    if (failed.length) {
+        const names = failed.map(d => path.basename(d.fileName || d.uri.path)).join(', ');
+        termLine(term, '[STM32-ERROR] 保存失败，已中止编译烧录: ' + names);
+        termLine(term, '[STM32-HINT] 请手动保存(Ctrl+S)这些文件后重试；若提示只读/占用，请检查文件权限或关闭占用程序');
+        vscode.window.showErrorMessage('有文件未能保存，已中止编译烧录: ' + names);
+        return false;
+    }
+    termLine(term, '[STM32] 保存检查: 已保存 ' + onDisk.length + ' 个文件');
+    if (untitled.length) {
+        termLine(term, '[STM32-WARN] 存在未保存到磁盘的临时文件(untitled)，其内容不会参与编译: ' +
+            untitled.map(d => d.uri.path || d.fileName || 'untitled').join(', '));
+    }
+    return true;
+}
+
 /* ================= 主流程 ================= */
 async function flashAndBuild() {
     const wf = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
@@ -144,7 +172,10 @@ async function flashAndBuild() {
     const term = getTerm();
     termClear(term);
 
-    // 1) 工具识别
+    // 1) 先保存所有未保存的更改，确保编译/烧录的是最新代码
+    if (!await saveAllBeforeBuild(term)) return;
+
+    // 2) 工具识别
     const tools = detectTools();
     const state = {
         cmake: tools.cmake ? 'OK' : '缺失',
@@ -167,7 +198,7 @@ async function flashAndBuild() {
         return;
     }
 
-    // 2) 编译 + 烧录
+    // 3) 编译 + 烧录
     const buildDir = await findBuildDir();
     const elf = await findElf();
     const parts = [];
