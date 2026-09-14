@@ -25,6 +25,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const child_process = require('child_process');
 
 const IS_WIN = process.platform === 'win32';
 const EXE = IS_WIN ? '.exe' : '';
@@ -347,13 +348,25 @@ function termBusy(t) {
         return !!(si && si.execution && si.execution.isRunning);
     } catch (_) { return false; }
 }
-// cmd 默认代码页是 936，直接 echo 中文就是乱码 —— 每个终端第一次使用前先切到 UTF-8，
-// 而且必须发生在打印任何中文之前（否则首次点按钮整屏提示全是乱码，看着像"识别不了"）。
-const _cpReady = new WeakSet();
+// cmd 默认代码页可能是 936 或 65001：echo 中文必须用 UTF-8(65001)，
+// 所以每次点按钮、打印任何中文之前，都先切到 65001（幂等，不切旧终端会残留上次的码页）。
 function ensureUtf8(t) {
-    if (!IS_WIN || _cpReady.has(t) || termBusy(t)) return;   // 终端忙时别往它的 stdin 里塞东西
-    _cpReady.add(t);
+    if (!IS_WIN || termBusy(t)) return;   // 终端忙时别往它的 stdin 里塞东西
     t.sendText('chcp 65001 >nul 2>nul', true);
+}
+// 系统 ANSI 代码页（如 936 = GBK）：STM32CubeProgrammer 的进度/状态中文是按 ANSI 输出的，
+// 工具阶段要切回 ANSI，否则 65001 解码 GBK 字节会变成 �。带缓存。
+let _acp = null;
+function ansicodePage() {
+    if (!IS_WIN) return null;
+    if (_acp !== null) return _acp;
+    try {
+        const out = child_process.execSync('reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage" /v ACP',
+            { encoding: 'utf8', timeout: 3000, windowsHide: true });
+        const m = out.match(/ACP\s+REG_SZ\s+(\d+)/);
+        _acp = m ? m[1] : '';
+    } catch (_) { _acp = ''; }
+    return _acp;
 }
 // 记住最后一次用的终端：出错时要把错误信息也打到它里面
 let _lastTerm = null;
@@ -599,7 +612,12 @@ function commandLine(tools, tgt, dirs, buildOnly, progArgs) {
         steps.push(q(tools.programmer) + ' ' + args);
     }
     const head = [];
-    if (IS_WIN) head.push('chcp 65001 >nul 2>nul');          // 让终端里的中文提示可读
+    if (IS_WIN) {
+        // 工具（尤其 STM32CubeProgrammer 的进度/状态中文按 GBK 输出）要在 ANSI 码页下运行，
+        // 否则 65001 解码 GBK 字节全变 �；我的横幅中文在上一步已用 65001 打印完毕。
+        const acp = ansicodePage();
+        if (acp) head.push('chcp ' + acp + ' >nul 2>nul');
+    }
     const pp = pathPrefix(dirs);
     if (pp) head.push(pp);
     const chain = steps.join(' && ') + ' && echo ' + RESULT_MARK + ' OK || echo ' + RESULT_MARK + ' FAIL';
@@ -695,5 +713,5 @@ module.exports._internals = {
     detectTools, bundlesRoots, resolveTool, versionOf,
     scanTargets, findElfIn, predictElf,
     toolchainPathDirs, checkCompanions, envWithPath, pathPrefix, commandLine, extractErrors,
-    LOG_FILE, log, folderPath, wsRootPath,
+    LOG_FILE, log, folderPath, wsRootPath, ansicodePage,
 };

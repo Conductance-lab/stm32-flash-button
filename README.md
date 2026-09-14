@@ -130,6 +130,9 @@ code --install-extension /tmp/stm32-flash-button.vsix
 - **[根因修复]** 工作区路径改从 `fsPath` → `uri.fsPath` → `uri.path` 逐级兜底解析。
   某些环境（虚拟工作区/远程）下 `WorkspaceFolder.fsPath` 为 `undefined`，旧版直接 `path.resolve(undefined)`
   抛异常并被吞成「未找到 CMake 构建目录，请先配置工程」；现已兼容
+- **[乱码修复]** 终端分阶段切码页：打印中文横幅用 `chcp 65001`（UTF-8），
+  构建/烧录阶段切回系统 ANSI 码页（如 936）。否则 STM32CubeProgrammer 按 GBK 输出的进度/状态中文，
+  在 65001 下解码会变 `�`
 - **[新增]** `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun` 设置项，
   以及命令 `STM32: 选择构建目录`
 
