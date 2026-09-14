@@ -247,6 +247,7 @@ function predictElf(buildDir) {
 // 扫描所有候选构建目录；每个候选自带「同一目录下」的固件
 function scanTargets(root) {
     const list = [], seen = new Set();
+    if (!root || typeof root !== 'string') return list;   // 防止 fsPath 为 undefined 时 path.resolve 抛异常
     for (const d of [root, ...listDirs(root, SCAN_DEPTH)]) {
         const rp = path.resolve(d);
         if (seen.has(rp)) continue;
@@ -273,6 +274,29 @@ function scanTargets(root) {
 function wsRoot() {
     const f = vscode.workspace.workspaceFolders;
     return f && f.length ? f[0] : null;
+}
+// WorkspaceFolder.fsPath 在虚拟工作区/远程等场景下可能是 undefined，
+// 这里逐级兜底：fsPath → uri.fsPath → uri.path 解码（/d:/x → d:/x）。
+function folderPath(wf) {
+    if (!wf) return null;
+    try {
+        if (typeof wf.fsPath === 'string' && wf.fsPath) return wf.fsPath;
+        if (wf.uri) {
+            if (typeof wf.uri.fsPath === 'string' && wf.uri.fsPath) return wf.uri.fsPath;
+            if (typeof wf.uri.path === 'string' && wf.uri.path) {
+                let p = decodeURIComponent(wf.uri.path);
+                if (IS_WIN && /^\/[A-Za-z]:/.test(p)) p = p.slice(1);
+                return p;
+            }
+        }
+    } catch (_) { }
+    return null;
+}
+function wsRootPath() {
+    const f = vscode.workspace.workspaceFolders;
+    if (!f) return null;
+    for (const wf of f) { const p = folderPath(wf); if (p) return p; }
+    return null;
 }
 function relLabel(rootPath, p) {
     try {
@@ -479,7 +503,13 @@ async function flashAndBuild() {
 async function doFlashAndBuild(run) {
     const root = wsRoot();
     if (!root) { vscode.window.showErrorMessage('请先打开 STM32 工程文件夹'); return; }
-    log(run, 'root=' + root.fsPath);
+    const rootPath = wsRootPath();
+    log(run, 'root=' + JSON.stringify({ fsPath: root.fsPath, uri: root.uri && root.uri.toString() }));
+    if (!rootPath) {
+        log(run, 'abort: 无法解析工作区路径');
+        vscode.window.showErrorMessage('无法解析工作区路径（WorkspaceFolder.fsPath 为空）。请在本地文件夹打开工程，或告诉我你用的是哪种打开方式');
+        return;
+    }
     if (Date.now() - _lastInvoke < 800) { log(run, 'skip: 防连点'); return; }   // 防连点
     _lastInvoke = Date.now();
 
@@ -529,7 +559,7 @@ async function doFlashAndBuild(run) {
 
     // 3) 选构建目录（构建目录与其 .elf 一定取自同一目录，避免「编 Debug、烧 Release」）
     let cands = [];
-    try { cands = scanTargets(root.fsPath); }
+    try { cands = scanTargets(rootPath); }
     catch (e) { log(run, 'scanTargets 失败', e); termLine(term, '[STM32-ERROR] 扫描构建目录出错: ' + ((e && e.message) || e)); }
     log(run, 'candidates=' + JSON.stringify(cands.map(c => ({ dir: c.buildDir, elf: c.elf, hasElf: c.hasElf }))));
     if (!cands.length) {
@@ -538,8 +568,8 @@ async function doFlashAndBuild(run) {
         vscode.window.showErrorMessage('未找到 CMake 构建目录，请先配置工程');
         return;
     }
-    termLine(term, '[STM32] 构建目录候选 ' + cands.length + ' 个: ' + cands.map(c => relLabel(root.fsPath, c.buildDir)).join(' / '));
-    const tgt = await pickTarget(root.fsPath, cands, term, false);
+    termLine(term, '[STM32] 构建目录候选 ' + cands.length + ' 个: ' + cands.map(c => relLabel(rootPath, c.buildDir)).join(' / '));
+    const tgt = await pickTarget(rootPath, cands, term, false);
     log(run, 'target=' + JSON.stringify(tgt && { dir: tgt.buildDir, elf: tgt.elf, hasElf: tgt.hasElf }));
     if (!tgt) { log(run, 'abort: 未选择构建目录'); return; }
 
@@ -598,9 +628,11 @@ async function diagTools() {
 
     const root = wsRoot();
     if (!root) { termLine(term, '[STM32-WARN] 未打开工作区文件夹'); return; }
-    const cands = scanTargets(root.fsPath);
+    const rootPath = wsRootPath();
+    if (!rootPath) { termLine(term, '[STM32-WARN] 无法解析工作区路径'); return; }
+    const cands = scanTargets(rootPath);
     termLine(term, '[STM32] 构建目录候选 ' + cands.length + ' 个:');
-    cands.forEach((c, i) => termLine(term, '  ' + (i + 1) + '] ' + relLabel(root.fsPath, c.buildDir) +
+    cands.forEach((c, i) => termLine(term, '  ' + (i + 1) + '] ' + relLabel(rootPath, c.buildDir) +
         '  elf=' + (c.hasElf ? c.elf : (c.elf ? c.elf + ' 预期，未生成' : '未找到')) +
         '  ' + new Date(c.mtime).toLocaleString()));
     termLine(term, '[STM32] 已记住的构建目录: ' + (config().get('buildDir', '') || '未设置，将自动选择'));
@@ -611,11 +643,13 @@ async function diagTools() {
 async function selectBuildDir() {
     const root = wsRoot();
     if (!root) { vscode.window.showErrorMessage('请先打开 STM32 工程文件夹'); return; }
+    const rootPath = wsRootPath();
+    if (!rootPath) { vscode.window.showErrorMessage('无法解析工作区路径'); return; }
     const term = getTerm(toolchainPathDirs(detectTools()), false);
-    const cands = scanTargets(root.fsPath);
+    const cands = scanTargets(rootPath);
     if (!cands.length) { vscode.window.showErrorMessage('未找到 CMake 构建目录'); return; }
-    const t = await pickTarget(root.fsPath, cands, term, true);
-    if (t) vscode.window.showInformationMessage('STM32: 已选择构建目录 ' + relLabel(root.fsPath, t.buildDir));
+    const t = await pickTarget(rootPath, cands, term, true);
+    if (t) vscode.window.showInformationMessage('STM32: 已选择构建目录 ' + relLabel(rootPath, t.buildDir));
 }
 
 /* ================= 打开 settings.json 让用户配置 ================= */
@@ -661,5 +695,5 @@ module.exports._internals = {
     detectTools, bundlesRoots, resolveTool, versionOf,
     scanTargets, findElfIn, predictElf,
     toolchainPathDirs, checkCompanions, envWithPath, pathPrefix, commandLine, extractErrors,
-    LOG_FILE, log,
+    LOG_FILE, log, folderPath, wsRootPath,
 };

@@ -127,6 +127,9 @@ code --install-extension /tmp/stm32-flash-button.vsix
 - **[增强]** 自检命令新增 `objcopy` / `size` 校验、待注入 `PATH` 目录列表、构建目录候选列表
 - **[可诊断]** 新增文件日志 `%TEMP%\stm32-flash-button.log`（每步耗时、工具、候选目录、最终命令、异常堆栈），
   异常同时打进终端与日志（不再只弹窗），新增命令 `STM32: 打开插件日志`
+- **[根因修复]** 工作区路径改从 `fsPath` → `uri.fsPath` → `uri.path` 逐级兜底解析。
+  某些环境（虚拟工作区/远程）下 `WorkspaceFolder.fsPath` 为 `undefined`，旧版直接 `path.resolve(undefined)`
+  抛异常并被吞成「未找到 CMake 构建目录，请先配置工程」；现已兼容
 - **[新增]** `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun` 设置项，
   以及命令 `STM32: 选择构建目录`
 
