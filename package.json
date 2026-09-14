@@ -1,7 +1,7 @@
 {
     "name": "stm32-flash-button",
     "displayName": "STM32 一键编译烧录",
-    "description": "状态栏一键『编译并烧录』：自动探测工具与固件，命令与报错输出到集成终端",
+    "description": "状态栏一键『编译并烧录』：自动探测工具与固件、自动注入工具链 PATH，命令与报错输出到集成终端",
     "version": "1.0.0",
     "publisher": "conductance-lab",
     "license": "MIT",
@@ -15,12 +15,15 @@
         "stm32",
         "flash",
         "build",
-        "cmake"
+        "cmake",
+        "stm32cubeprogrammer",
+        "st-link"
     ],
     "activationEvents": [
         "onCommand:stm32.flashAndBuild",
         "onCommand:stm32.diag",
         "onCommand:stm32.configureTools",
+        "onCommand:stm32.selectBuildDir",
         "workspaceContains:**/*.ioc",
         "workspaceContains:**/CMakeLists.txt",
         "workspaceContains:**/CMakePresets.json"
@@ -39,6 +42,10 @@
             {
                 "command": "stm32.configureTools",
                 "title": "STM32: 打开 settings.json 配置工具路径"
+            },
+            {
+                "command": "stm32.selectBuildDir",
+                "title": "STM32: 选择构建目录"
             }
         ],
         "configuration": {
@@ -53,7 +60,33 @@
                     "type": "array",
                     "items": { "type": "string" },
                     "default": [],
-                    "description": "可选：手动指定 cmake/ninja/gcc 所在目录"
+                    "description": "可选：手动指定 cmake / ninja / arm-none-eabi-gcc 所在目录"
+                },
+                "stm32flash.extraPathDirs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "description": "可选：额外前置到 PATH 的目录。构建期 objcopy / size 是被『裸文件名』调用的（CMake 模板把 CMAKE_OBJCOPY / CMAKE_SIZE 写成了 arm-none-eabi-objcopy / arm-none-eabi-size），若报找不到它们，把对应 bin 目录填这里"
+                },
+                "stm32flash.buildDir": {
+                    "type": "string",
+                    "default": "",
+                    "description": "记住的构建目录（相对工作区，例如 build/Debug）。在 Debug/Release 同时存在时由插件选择后自动写入；留空则每次自动选（多个候选会弹选择框）"
+                },
+                "stm32flash.programmerArgs": {
+                    "type": "string",
+                    "default": "-c port=SWD -w \"{elf}\" -v -rst",
+                    "description": "烧录器参数，{elf} 会替换为固件绝对路径。默认：SWD 连接、写入并校验、烧完复位运行"
+                },
+                "stm32flash.buildOnly": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "只编译不烧录（板子不在手边时用来验证工程能否构建）"
+                },
+                "stm32flash.clearBeforeRun": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "点击按钮时先清屏。默认 false，保留历史输出便于回看"
                 }
             }
         }

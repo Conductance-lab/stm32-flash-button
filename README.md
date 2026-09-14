@@ -27,11 +27,18 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 > 没装官方扩展时，请把上述工具加入系统 `PATH`，或用下面的设置手动指定。
 
 ## 特性
+- **自动注入工具链 PATH（v1.0.0 关键修复）**：构建前把 `arm-none-eabi-gcc` / ninja / cmake 所在目录前置到 `PATH`。
+  很多 CMake 工程模板把 `CMAKE_OBJCOPY` / `CMAKE_SIZE` 写成**裸文件名**（`arm-none-eabi-objcopy` / `arm-none-eabi-size`），
+  CMake 不会把它们解析成绝对路径 —— 构建期必须能从 `PATH` 找到，否则 `POST_BUILD` 直接报
+  `'arm-none-eabi-objcopy' 不是内部或外部命令` → 整个构建失败 → 后面的烧录也不会执行。
 - 自动保存未保存的更改：点按钮时先保存全部脏文件，再编译 → 烧录，避免烧到旧代码
 - 自动探测工具链：用户设置 → 系统 `PATH` → ST 工具 bundles
-- 自动识别固件：扫描工作区 `**/build/**/*.elf`
-- 自动增量编译：检测到 `build.ninja` 即先编译再烧录（编译失败则不会烧录）
-- 结果 / 报错输出到集成终端「STM32 编译烧录」，可直接复制给 AI / 人工分析
+- **构建目录与固件严格成对**：`build/Debug` 与 `build/Release` 同时存在时不会「编 Debug、烧 Release」；
+  多个候选会弹选择框，并把选择记到 `stm32flash.buildDir`
+- **明确的结果反馈**：命令末尾输出 `[STM32-RESULT] OK / FAIL` 哨兵；VS Code 1.93+ 还能读到真实退出码并弹窗提示成功/失败
+- 自动增量编译：找到构建目录即先编译再烧录（编译失败则不会烧录）
+- 复用同一个终端（不再每次清空重建），保留历史输出，可直接复制给 AI / 人工分析
+- 自检命令会校验 `objcopy` / `size` 是否存在，提前暴露「找不到构建期伴随程序」这类问题
 
 ## 安装
 
@@ -54,25 +61,61 @@ code --install-extension /tmp/stm32-flash-button.vsix
 2. 点状态栏 **🚀 编译并烧录**，或命令面板 `STM32: 一键编译并烧录`
    > 点击后会**先自动保存所有未保存的更改**，再执行编译与烧录；若某个文件保存失败（只读 / 被占用），会中止本次编译烧录并提示。
 3. 结果/报错输出在终端「STM32 编译烧录」；自检用 `STM32: 终端自检(工具识别)`
+   > 命令末尾会打印 `[STM32-RESULT] OK`（成功）或 `[STM32-RESULT] FAIL`（失败），便于快速判断
+4. 构建目录有多个（`build/Debug`、`build/Release`）时会弹选择框，选一次即记住；
+   要改选用命令面板的 `STM32: 选择构建目录`
 
-## 手动指定工具路径（可选）
-工具未被自动识别时，插件会弹窗并打开 `settings.json`，可配置：
+## settings.json 配置项（全部可选）
 ```jsonc
 {
+  // 工具所在目录（自动探测不到时填）
   "stm32flash.toolchainDirs": [
     "C:/工具/cmake/bin",
     "C:/工具/ninja/bin",
     "C:/工具/gnu-tools-for-stm32/版本/bin"
   ],
-  "stm32flash.programmer": "C:/工具/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe"
+  // 额外前置到 PATH 的目录（构建期 objcopy / size 找不到时，把工具链 bin 填这里）
+  "stm32flash.extraPathDirs": ["C:/工具/gnu-tools-for-stm32/版本/bin"],
+  // 烧录器绝对路径
+  "stm32flash.programmer": "C:/工具/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe",
+  // 记住的构建目录（相对工作区，插件选择后会自动写入）
+  "stm32flash.buildDir": "build/Debug",
+  // 烧录参数，{elf} 会替换成固件绝对路径
+  "stm32flash.programmerArgs": "-c port=SWD -w \"{elf}\" -v -rst",
+  // 只编译不烧录（板子不在手边时验证工程）
+  "stm32flash.buildOnly": false,
+  // 点按钮时先清屏（默认 false，保留历史输出）
+  "stm32flash.clearBeforeRun": false
 }
 ```
-配置后重新点击按钮即可。
+工具未被自动识别时，插件会弹窗并打开 `settings.json`，改完重新点击按钮即可。
 
 ## 常见问题
+- **构建报 `'arm-none-eabi-objcopy' 不是内部或外部命令` / `FAILED` 停在 POST_BUILD**
+  → 构建期找不到 `objcopy` / `size`。插件默认会把 gcc 所在目录前置到 `PATH`，若你的工具链布局特殊，
+  把该工具链的 `bin` 目录填到 `stm32flash.extraPathDirs`，再用 `STM32: 终端自检(工具识别)` 确认输出
+  `构建期伴随程序: objcopy=OK  size=OK`
+- **点了按钮但只编译没烧录** → 看终端是否有 `[STM32-RESULT] OK`；若构建目录里没有 `.elf`，
+  或 `CMakeCache.txt` 缺失导致无法推断固件路径，会退化为只编译（终端里有 `[STM32-WARN]` 提示）
 - 未识别到工具 → 先确认已装 ST 官方扩展，或手动配置上面设置；自检用 `STM32: 终端自检(工具识别)`
 - 同一工具存在多个版本 → 插件会自动选版本号最高的那个
+- 不想在终端里打断上一条命令 → 插件检测到终端忙时会先询问是否继续
 - macOS / Linux 未识别到工具 → 官方工具包位置较分散，建议在设置里手动指定路径
 - 插件不自动更新 → 重新执行安装命令即可覆盖升级
 - 烧录 `Unable to get core ID` → 板子独立供电 / SWD 接线共地 / 或 CubeMX 的 SYS→Debug 设成了 `No Debug`（会关闭 SWD），此时把 BOOT0 拨到 1 可恢复连接
+
+## 变更记录
+
+### v1.0.0（重写）
+- **[根因修复]** 构建前把工具链目录注入 `PATH`（终端 `env` + 命令内联 `set`/`export` 双保险），
+  修复「CMake 模板把 `CMAKE_OBJCOPY` / `CMAKE_SIZE` 写成裸文件名 → POST_BUILD 找不到 `arm-none-eabi-objcopy` →
+  构建失败 → 因 `&&` 串联导致烧录永不执行」
+- **[逻辑修复]** 构建目录与 `.elf` 严格成对取自同一目录（原来分别取第一个命中，会编 Debug 烧 Release）
+- **[逻辑修复]** 编译失败时明确报错并提示自检，不再无脑弹「已在终端执行」
+- **[稳健性]** 自己递归扫描工程，不再受 `files.exclude` / `search.exclude` 影响
+- **[稳健性]** 复用终端保留历史输出；命令末尾输出 `[STM32-RESULT] OK/FAIL` 哨兵；
+  VS Code 1.93+ 通过 shell integration 读取退出码并弹窗
+- **[增强]** 自检命令新增 `objcopy` / `size` 校验、待注入 `PATH` 目录列表、构建目录候选列表
+- **[新增]** `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun` 设置项，
+  以及命令 `STM32: 选择构建目录`
 
