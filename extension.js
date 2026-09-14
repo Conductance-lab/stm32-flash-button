@@ -308,6 +308,14 @@ function termBusy(t) {
         return !!(si && si.execution && si.execution.isRunning);
     } catch (_) { return false; }
 }
+// cmd 默认代码页是 936，直接 echo 中文就是乱码 —— 每个终端第一次使用前先切到 UTF-8，
+// 而且必须发生在打印任何中文之前（否则首次点按钮整屏提示全是乱码，看着像"识别不了"）。
+const _cpReady = new WeakSet();
+function ensureUtf8(t) {
+    if (!IS_WIN || _cpReady.has(t) || termBusy(t)) return;   // 终端忙时别往它的 stdin 里塞东西
+    _cpReady.add(t);
+    t.sendText('chcp 65001 >nul 2>nul', true);
+}
 // 复用同一个终端（不再 dispose）：保留上一次的输出，便于回看 / 复制给 AI 分析。
 // 创建时先把工具链目录注入 PATH；复用终端时 env 无法更新，所以命令里还会再设一次。
 function getTerm(dirs, clear) {
@@ -323,9 +331,11 @@ function getTerm(dirs, clear) {
     if (!t) t = vscode.window.createTerminal({ name: TERM_NAME, shellPath: shellPath(), env: envWithPath(dirs) });
     t.show(true);
     if (clear) termClear(t);
+    ensureUtf8(t);
     return t;
 }
-// 提示 / 错误行：按 shell 转义，避免解析报错
+// 提示行里不要出现 ( ) ! = > 等字符：cmd 回显命令时会显示成 ^( ^) ^! 等转义符，看着像报错。
+// termLine 仍保留转义以防万一，但文案层面已经避开。
 function termLine(t, s) {
     if (IS_WIN) {
         // 注意：cmd 的 echo 里 % 无法用 ^ 转义，直接换成全角字符，避免提示文本显示异常
@@ -338,14 +348,29 @@ function termLine(t, s) {
 }
 function termClear(t) { t.sendText(IS_WIN ? 'cls' : 'clear', true); }
 function termCmd(t, s) { t.sendText(s); }   // 真实命令（cmd/bash 均支持 && 与引号路径）
-// 若 VS Code 支持 shell integration（1.93+），读取真实退出码后弹窗；
+// 从构建/烧录输出里挑出真正的关键报错行，免得淹在几百行编译日志里
+function extractErrors(text) {
+    const pat = /(FAILED|error:|Error:|undefined reference|multiple definition|fatal error|ninja: build stopped|No such file|not found|cannot find|Unable to|no such file)/;
+    const out = [], seen = new Set();
+    for (let l of String(text || '').split(/\r?\n/)) {
+        l = l.trim();
+        if (!l || !pat.test(l)) continue;
+        if (l.length > 220) l = l.slice(0, 220) + ' …';
+        if (seen.has(l)) continue;
+        seen.add(l); out.push(l);
+        if (out.length >= 8) break;
+    }
+    return out;
+}
+// 若 VS Code 支持 shell integration（1.93+），读取真实退出码 + 输出，
+// 失败时把关键报错行提取出来弹窗（可一键复制给 AI），不用再让人在终端里大海捞针。
 // 不支持时也不影响：终端里还有 [STM32-RESULT] OK/FAIL 哨兵行。
 function watchResult(t) {
     const onEnd = vscode.window.onDidEndTerminalShellExecution;
     if (typeof onEnd !== 'function') return;
     let sub = null;
-    const giveUp = setTimeout(() => { try { if (sub) sub.dispose(); } catch (_) { } }, 5 * 60 * 1000);
-    sub = onEnd(e => {
+    const giveUp = setTimeout(() => { try { if (sub) sub.dispose(); } catch (_) { } }, 10 * 60 * 1000);
+    sub = onEnd(async e => {
         try {
             if (e.terminal !== t) return;
             const line = (e.execution && e.execution.commandLine && e.execution.commandLine.value) || '';
@@ -354,8 +379,29 @@ function watchResult(t) {
             if (typeof code !== 'number') return;
             clearTimeout(giveUp);
             try { sub.dispose(); } catch (_) { }
-            if (code === 0) vscode.window.showInformationMessage('STM32: 编译并烧录完成 ✅（详见「' + TERM_NAME + '」终端）');
-            else vscode.window.showErrorMessage('STM32: 编译或烧录失败（退出码 ' + code + '）❌ 可执行命令「STM32: 终端自检(工具识别)」定位原因');
+
+            let out = '';
+            try {
+                if (typeof e.execution.read === 'function') {
+                    for await (const chunk of e.execution.read()) out += chunk;
+                }
+            } catch (_) { }
+
+            if (code === 0) {
+                vscode.window.showInformationMessage('STM32: 编译并烧录完成 ✅');
+                return;
+            }
+            const errs = extractErrors(out);
+            const items = errs.length ? ['复制关键报错', '查看终端'] : ['查看终端'];
+            const pick = await vscode.window.showErrorMessage(
+                'STM32: 编译或烧录失败，退出码 ' + code + '，已提取 ' + errs.length + ' 行关键报错',
+                ...items);
+            if (pick === '复制关键报错') {
+                try {
+                    await vscode.env.clipboard.writeText(errs.join('\n'));
+                    vscode.window.showInformationMessage('STM32: 关键报错已复制到剪贴板，可直接贴给 AI 分析');
+                } catch (_) { }
+            }
         } catch (_) { }
     });
 }
@@ -376,13 +422,13 @@ async function saveAllBeforeBuild(term) {
     if (failed.length) {
         const names = failed.map(d => path.basename(d.fileName || d.uri.path)).join(', ');
         termLine(term, '[STM32-ERROR] 保存失败，已中止编译烧录: ' + names);
-        termLine(term, '[STM32-HINT] 请手动保存(Ctrl+S)这些文件后重试；若提示只读/占用，请检查文件权限或关闭占用程序');
+        termLine(term, '[STM32-HINT] 请手动按 Ctrl+S 保存这些文件后重试；若提示只读或被占用，请检查文件权限或关闭占用程序');
         vscode.window.showErrorMessage('有文件未能保存，已中止编译烧录: ' + names);
         return false;
     }
     termLine(term, '[STM32] 保存检查: 已保存 ' + onDisk.length + ' 个文件');
     if (untitled.length) {
-        termLine(term, '[STM32-WARN] 存在未保存到磁盘的临时文件(untitled)，其内容不会参与编译: ' +
+        termLine(term, '[STM32-WARN] 存在未保存到磁盘的临时文件【untitled】，其内容不会参与编译: ' +
             untitled.map(d => d.uri.path || d.fileName || 'untitled').join(', '));
     }
     return true;
@@ -411,7 +457,7 @@ async function flashAndBuild() {
     // 2) 工具识别
     termLine(term, '[STM32] 工具识别: cmake=' + okMark(tools.cmake) + ' ninja=' + okMark(tools.ninja) +
         ' gcc=' + okMark(tools.gcc) + ' programmer=' + okMark(tools.programmer));
-    if (tools.gcc) termLine(term, '[STM32] 工具链 bin(将被前置到 PATH): ' + toolchainDirOf(tools.gcc));
+    if (tools.gcc) termLine(term, '[STM32] 工具链 bin 待前置到 PATH: ' + toolchainDirOf(tools.gcc));
 
     // ★ 关键检查：objcopy / size 是构建期被「裸文件名」调用的，找不到就一定构建失败
     const comp = checkCompanions(tools);
@@ -423,10 +469,10 @@ async function flashAndBuild() {
 
     const miss = [];
     if (!tools.cmake) miss.push('cmake');
-    if (!cfg.get('buildOnly', false) && !tools.programmer) miss.push('STM32CubeProgrammer(CLI)');
+    if (!cfg.get('buildOnly', false) && !tools.programmer) miss.push('STM32CubeProgrammer CLI');
     if (miss.length) {
         termLine(term, '[STM32-ERROR] 未识别到工具: ' + miss.join(', '));
-        termLine(term, '[STM32-HINT] 解决方式: ① 点下方「打开 settings.json」填写 stm32flash.toolchainDirs / stm32flash.programmer ② 或安装 STM32CubeIDE 扩展(自动提供工具)');
+        termLine(term, '[STM32-HINT] 解决方式: ① 点下方「打开 settings.json」填写 stm32flash.toolchainDirs / stm32flash.programmer ② 或安装 STM32CubeIDE 扩展，它会自带工具链');
         const pick = await vscode.window.showErrorMessage('未识别到工具: ' + miss.join(', '), '打开 settings.json 配置');
         if (pick === '打开 settings.json 配置') await configureTools();
         return;
@@ -435,7 +481,7 @@ async function flashAndBuild() {
     // 3) 选构建目录（构建目录与其 .elf 一定取自同一目录，避免「编 Debug、烧 Release」）
     const cands = scanTargets(root.fsPath);
     if (!cands.length) {
-        termLine(term, '[STM32-ERROR] 未找到任何 CMake 构建目录(需含 build.ninja / CMakeCache.txt / Makefile)');
+        termLine(term, '[STM32-ERROR] 未找到任何 CMake 构建目录，需含 build.ninja 或 CMakeCache.txt 或 Makefile');
         termLine(term, '[STM32-HINT] 请先用 STM32Cube 扩展或 cube-cmake --preset Debug 配置一次工程，再点本按钮');
         vscode.window.showErrorMessage('未找到 CMake 构建目录，请先配置工程');
         return;
@@ -447,8 +493,8 @@ async function flashAndBuild() {
     // 4) 拼命令: PATH 注入 → 编译 → 烧录 → 结果哨兵
     const buildOnly = !!cfg.get('buildOnly', false);
     if (!buildOnly) {
-        if (tgt.elf && !tgt.hasElf) termLine(term, '[STM32] 该目录尚无固件，本次先编译再烧录(预期固件: ' + tgt.elf + ')');
-        if (!tgt.elf) termLine(term, '[STM32-WARN] 无法确定固件路径(缺少 CMakeCache)，本次只编译不烧录');
+        if (tgt.elf && !tgt.hasElf) termLine(term, '[STM32] 该目录尚无固件，本次先编译再烧录，预期固件: ' + tgt.elf);
+        if (!tgt.elf) termLine(term, '[STM32-WARN] 无法确定固件路径【缺少 CMakeCache】，本次只编译不烧录');
     }
     const cmd = commandLine(tools, tgt, dirs, buildOnly, String(cfg.get('programmerArgs', DEFAULT_PROG_ARGS) || ''));
 
@@ -483,7 +529,7 @@ async function diagTools() {
     termLine(term, '[STM32] === 环境自检 ===');
     termLine(term, '[STM32] 平台: ' + process.platform + ' / shell: ' + path.basename(shellPath()));
     for (const k of ['cmake', 'ninja', 'gcc', 'programmer']) {
-        termLine(term, '  ' + k + ' => ' + (tools[k] ? 'OK: ' + tools[k] : '缺失'));
+        termLine(term, '  ' + k + ' = ' + (tools[k] ? 'OK: ' + tools[k] : '缺失'));
     }
     const comp = checkCompanions(tools);
     termLine(term, '[STM32] 构建期伴随程序: objcopy=' + (comp.found['arm-none-eabi-objcopy' + EXE] ? 'OK' : '缺失') +
@@ -491,7 +537,7 @@ async function diagTools() {
     if (comp.missing.length) {
         termLine(term, '[STM32-ERROR] 缺失: ' + comp.missing.join(', ') + ' → 构建会在 POST_BUILD 处 FAILED，烧录不会执行');
     }
-    termLine(term, '[STM32] 将前置到 PATH 的目录(' + dirs.length + ' 个):');
+    termLine(term, '[STM32] 将前置到 PATH 的目录，共 ' + dirs.length + ' 个:');
     for (const d of dirs) termLine(term, '  ' + d);
     if (!dirs.length) termLine(term, '[STM32-WARN] 无目录可注入 → 若构建报 arm-none-eabi-objcopy 找不到，请配置 stm32flash.extraPathDirs');
 
@@ -499,10 +545,10 @@ async function diagTools() {
     if (!root) { termLine(term, '[STM32-WARN] 未打开工作区文件夹'); return; }
     const cands = scanTargets(root.fsPath);
     termLine(term, '[STM32] 构建目录候选 ' + cands.length + ' 个:');
-    cands.forEach((c, i) => termLine(term, '  ' + (i + 1) + ') ' + relLabel(root.fsPath, c.buildDir) +
-        '  elf=' + (c.hasElf ? c.elf : (c.elf ? c.elf + '(预期，未生成)' : '未找到')) +
+    cands.forEach((c, i) => termLine(term, '  ' + (i + 1) + '] ' + relLabel(root.fsPath, c.buildDir) +
+        '  elf=' + (c.hasElf ? c.elf : (c.elf ? c.elf + ' 预期，未生成' : '未找到')) +
         '  ' + new Date(c.mtime).toLocaleString()));
-    termLine(term, '[STM32] 已记住的构建目录: ' + (config().get('buildDir', '') || '(未设置，自动选择)'));
+    termLine(term, '[STM32] 已记住的构建目录: ' + (config().get('buildDir', '') || '未设置，将自动选择'));
     term.show(true);
 }
 
@@ -547,5 +593,5 @@ module.exports = { activate, deactivate };
 module.exports._internals = {
     detectTools, bundlesRoots, resolveTool, versionOf,
     scanTargets, findElfIn, predictElf,
-    toolchainPathDirs, checkCompanions, envWithPath, pathPrefix, commandLine,
+    toolchainPathDirs, checkCompanions, envWithPath, pathPrefix, commandLine, extractErrors,
 };

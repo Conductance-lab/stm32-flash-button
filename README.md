@@ -35,7 +35,11 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 - 自动探测工具链：用户设置 → 系统 `PATH` → ST 工具 bundles
 - **构建目录与固件严格成对**：`build/Debug` 与 `build/Release` 同时存在时不会「编 Debug、烧 Release」；
   多个候选会弹选择框，并把选择记到 `stm32flash.buildDir`
-- **明确的结果反馈**：命令末尾输出 `[STM32-RESULT] OK / FAIL` 哨兵；VS Code 1.93+ 还能读到真实退出码并弹窗提示成功/失败
+- **明确的结果反馈**：命令末尾输出 `[STM32-RESULT] OK / FAIL` 哨兵；VS Code 1.93+ 还能读到真实退出码，
+  **失败时自动从几百行日志里提取关键报错行**（`FAILED` / `multiple definition` / `undefined reference` / `error:` …）
+  并弹窗，可一键复制贴给 AI
+- **终端中文不乱码**：每个终端首次使用前先 `chcp 65001`，且发生在打印任何中文之前（首点不再满屏乱码）
+- **提示文案不触发 cmd 转义**：不会再出现 `工具链 bin^(将被前置到 PATH^)` 这种看着像报错的回显
 - 自动增量编译：找到构建目录即先编译再烧录（编译失败则不会烧录）
 - 复用同一个终端（不再每次清空重建），保留历史输出，可直接复制给 AI / 人工分析
 - 自检命令会校验 `objcopy` / `size` 是否存在，提前暴露「找不到构建期伴随程序」这类问题
@@ -114,7 +118,9 @@ code --install-extension /tmp/stm32-flash-button.vsix
 - **[逻辑修复]** 编译失败时明确报错并提示自检，不再无脑弹「已在终端执行」
 - **[稳健性]** 自己递归扫描工程，不再受 `files.exclude` / `search.exclude` 影响
 - **[稳健性]** 复用终端保留历史输出；命令末尾输出 `[STM32-RESULT] OK/FAIL` 哨兵；
-  VS Code 1.93+ 通过 shell integration 读取退出码并弹窗
+  VS Code 1.93+ 通过 shell integration 读取退出码**与输出**，失败时提取关键报错行并支持一键复制
+- **[观感修复]** 终端首次使用前先 `chcp 65001`（此前 `chcp` 在末尾，首点中文全乱码）；
+  提示文案剔除 `()` `=>` 等会被 cmd 转义成 `^( )` `=^>` 的字符
 - **[增强]** 自检命令新增 `objcopy` / `size` 校验、待注入 `PATH` 目录列表、构建目录候选列表
 - **[新增]** `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun` 设置项，
   以及命令 `STM32: 选择构建目录`
