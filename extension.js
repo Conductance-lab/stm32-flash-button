@@ -33,6 +33,21 @@ const RESULT_MARK = '[STM32-RESULT]';
 const DEFAULT_PROG_ARGS = '-c port=SWD -w "{elf}" -v -rst';
 const SCAN_DEPTH = 4;                 // 从工作区根向下递归的深度
 const SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.vs', '.cache', 'node_modules', '.venv', 'venv', '__pycache__', 'dist']);
+const LOG_FILE = path.join(os.tmpdir(), 'stm32-flash-button.log');
+const LOG_MAX = 512 * 1024;
+// 文件日志：终端可能被弹窗打断、被刷屏，出问题时直接看这个文件最省事。
+// 任何一步报错都会被记下来，不会再出现「终端打了几行就没下文」的鬼故事。
+function log() {
+    try {
+        const parts = [];
+        for (let i = 0; i < arguments.length; i++) {
+            const a = arguments[i];
+            parts.push(typeof a === 'string' ? a : (a && a.stack) || String(a));
+        }
+        try { if (fs.statSync(LOG_FILE).size > LOG_MAX) fs.writeFileSync(LOG_FILE, ''); } catch (_) { }
+        fs.appendFileSync(LOG_FILE, '[' + new Date().toISOString() + '] ' + parts.join(' ') + '\r\n');
+    } catch (_) { }
+}
 
 /* ================= 工具探测 ================= */
 // 各平台 ST 工具 bundles 常见位置（Windows / macOS / Linux，目录名常带版本号）
@@ -316,6 +331,8 @@ function ensureUtf8(t) {
     _cpReady.add(t);
     t.sendText('chcp 65001 >nul 2>nul', true);
 }
+// 记住最后一次用的终端：出错时要把错误信息也打到它里面
+let _lastTerm = null;
 // 复用同一个终端（不再 dispose）：保留上一次的输出，便于回看 / 复制给 AI 分析。
 // 创建时先把工具链目录注入 PATH；复用终端时 env 无法更新，所以命令里还会再设一次。
 function getTerm(dirs, clear) {
@@ -332,6 +349,7 @@ function getTerm(dirs, clear) {
     t.show(true);
     if (clear) termClear(t);
     ensureUtf8(t);
+    _lastTerm = t;
     return t;
 }
 // 提示行里不要出现 ( ) ! = > 等字符：cmd 回显命令时会显示成 ^( ^) ^! 等转义符，看着像报错。
@@ -436,23 +454,50 @@ async function saveAllBeforeBuild(term) {
 
 /* ================= 主流程 ================= */
 let _lastInvoke = 0;
+// 外层只负责「兜底」：把任何异常清楚地同时打到终端和日志文件，并且不吞掉。
+// （之前异常会被 catch 成弹窗，用户关掉后终端就停在原地，看起来像卡死。）
 async function flashAndBuild() {
+    const run = Date.now().toString(36).slice(-5);
+    log('=== run ' + run + ' start ===', 'vscode=' + vscode.version, 'platform=' + process.platform);
+    try {
+        await doFlashAndBuild(run);
+        log(run, 'done');
+    } catch (e) {
+        const msg = (e && e.message) || String(e);
+        log(run, 'FATAL', (e && e.stack) || String(e));
+        try {
+            if (_lastTerm) {
+                termLine(_lastTerm, '[STM32-ERROR] 插件内部错误: ' + msg);
+                termLine(_lastTerm, '[STM32-HINT] 完整日志: ' + LOG_FILE);
+                termLine(_lastTerm, '[STM32-HINT] 可在命令面板执行「STM32: 打开插件日志」查看');
+            }
+        } catch (_) { }
+        vscode.window.showErrorMessage('STM32 插件内部错误: ' + msg + '（日志: ' + LOG_FILE + '）');
+    }
+}
+
+async function doFlashAndBuild(run) {
     const root = wsRoot();
     if (!root) { vscode.window.showErrorMessage('请先打开 STM32 工程文件夹'); return; }
-    if (Date.now() - _lastInvoke < 800) return;           // 防连点
+    log(run, 'root=' + root.fsPath);
+    if (Date.now() - _lastInvoke < 800) { log(run, 'skip: 防连点'); return; }   // 防连点
     _lastInvoke = Date.now();
 
     const cfg = config();
     const tools = detectTools();
     const dirs = toolchainPathDirs(tools);
+    log(run, 'tools=' + JSON.stringify(tools));
+    log(run, 'pathDirs=' + JSON.stringify(dirs));
     const term = getTerm(dirs, !!cfg.get('clearBeforeRun', false));
+    log(run, 'terminal ready, busy=' + termBusy(term));
     if (termBusy(term)) {
         const go = await vscode.window.showWarningMessage('终端「' + TERM_NAME + '」正在执行上一条命令，继续会打断它。是否继续？', '继续', '取消');
+        log(run, 'busy dialog -> ' + go);
         if (go !== '继续') return;
     }
 
     // 1) 先保存所有未保存的更改，确保编译/烧录的是最新代码
-    if (!await saveAllBeforeBuild(term)) return;
+    if (!await saveAllBeforeBuild(term)) { log(run, 'abort: 保存失败'); return; }
 
     // 2) 工具识别
     termLine(term, '[STM32] 工具识别: cmake=' + okMark(tools.cmake) + ' ninja=' + okMark(tools.ninja) +
@@ -460,7 +505,10 @@ async function flashAndBuild() {
     if (tools.gcc) termLine(term, '[STM32] 工具链 bin 待前置到 PATH: ' + toolchainDirOf(tools.gcc));
 
     // ★ 关键检查：objcopy / size 是构建期被「裸文件名」调用的，找不到就一定构建失败
-    const comp = checkCompanions(tools);
+    let comp = { missing: [] };
+    try { comp = checkCompanions(tools); }
+    catch (e) { log(run, 'checkCompanions 失败', e); termLine(term, '[STM32-WARN] 检查 objcopy/size 时出错: ' + ((e && e.message) || e)); }
+    log(run, 'companions missing=' + JSON.stringify(comp.missing));
     if (comp.missing.length) {
         termLine(term, '[STM32-ERROR] 找不到构建期伴随程序: ' + comp.missing.join(', '));
         termLine(term, '[STM32-HINT] 原因: CMake 工程模板把 CMAKE_OBJCOPY/CMAKE_SIZE 写成裸文件名，构建时必须能从 PATH 找到它们；否则 POST_BUILD 直接 FAILED，后面的烧录也不会执行');
@@ -470,6 +518,7 @@ async function flashAndBuild() {
     const miss = [];
     if (!tools.cmake) miss.push('cmake');
     if (!cfg.get('buildOnly', false) && !tools.programmer) miss.push('STM32CubeProgrammer CLI');
+    log(run, 'missing tools=' + JSON.stringify(miss));
     if (miss.length) {
         termLine(term, '[STM32-ERROR] 未识别到工具: ' + miss.join(', '));
         termLine(term, '[STM32-HINT] 解决方式: ① 点下方「打开 settings.json」填写 stm32flash.toolchainDirs / stm32flash.programmer ② 或安装 STM32CubeIDE 扩展，它会自带工具链');
@@ -479,7 +528,10 @@ async function flashAndBuild() {
     }
 
     // 3) 选构建目录（构建目录与其 .elf 一定取自同一目录，避免「编 Debug、烧 Release」）
-    const cands = scanTargets(root.fsPath);
+    let cands = [];
+    try { cands = scanTargets(root.fsPath); }
+    catch (e) { log(run, 'scanTargets 失败', e); termLine(term, '[STM32-ERROR] 扫描构建目录出错: ' + ((e && e.message) || e)); }
+    log(run, 'candidates=' + JSON.stringify(cands.map(c => ({ dir: c.buildDir, elf: c.elf, hasElf: c.hasElf }))));
     if (!cands.length) {
         termLine(term, '[STM32-ERROR] 未找到任何 CMake 构建目录，需含 build.ninja 或 CMakeCache.txt 或 Makefile');
         termLine(term, '[STM32-HINT] 请先用 STM32Cube 扩展或 cube-cmake --preset Debug 配置一次工程，再点本按钮');
@@ -488,7 +540,8 @@ async function flashAndBuild() {
     }
     termLine(term, '[STM32] 构建目录候选 ' + cands.length + ' 个: ' + cands.map(c => relLabel(root.fsPath, c.buildDir)).join(' / '));
     const tgt = await pickTarget(root.fsPath, cands, term, false);
-    if (!tgt) return;
+    log(run, 'target=' + JSON.stringify(tgt && { dir: tgt.buildDir, elf: tgt.elf, hasElf: tgt.hasElf }));
+    if (!tgt) { log(run, 'abort: 未选择构建目录'); return; }
 
     // 4) 拼命令: PATH 注入 → 编译 → 烧录 → 结果哨兵
     const buildOnly = !!cfg.get('buildOnly', false);
@@ -497,12 +550,14 @@ async function flashAndBuild() {
         if (!tgt.elf) termLine(term, '[STM32-WARN] 无法确定固件路径【缺少 CMakeCache】，本次只编译不烧录');
     }
     const cmd = commandLine(tools, tgt, dirs, buildOnly, String(cfg.get('programmerArgs', DEFAULT_PROG_ARGS) || ''));
+    log(run, 'cmd=' + cmd);
 
     termLine(term, '[STM32] 平台 ' + process.platform + ' / shell ' + path.basename(shellPath()) +
         ' / PATH 注入 ' + (dirs.length ? dirs.length + ' 个目录' : '无'));
     termLine(term, '──── 以下为真实命令输出 ────');
     watchResult(term);
     termCmd(term, cmd);
+    log(run, 'cmd sent');
 }
 
 /* 组装真正发到终端的命令行：chcp → PATH 注入 → 编译 → 烧录 → 结果哨兵 */
@@ -569,6 +624,17 @@ async function configureTools() {
     vscode.window.showInformationMessage('可配置: "stm32flash.toolchainDirs"(cmake/ninja/gcc 所在目录数组)、"stm32flash.extraPathDirs"(额外注入 PATH 的目录，如 objcopy/size 所在目录)、"stm32flash.programmer"(烧录器绝对路径)、"stm32flash.buildDir"(默认构建目录)。保存后重新点击按钮。');
 }
 
+/* 打开插件日志：出问题时最有用的一招 */
+async function openLog() {
+    try {
+        if (!fs.existsSync(LOG_FILE)) fs.writeFileSync(LOG_FILE, '');
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(LOG_FILE));
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (e) {
+        vscode.window.showWarningMessage('无法打开日志文件 ' + LOG_FILE + '：' + ((e && e.message) || e));
+    }
+}
+
 /* ================= 激活 ================= */
 function activate(context) {
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.LEFT, 100);
@@ -584,7 +650,8 @@ function activate(context) {
         reg('stm32.flashAndBuild', flashAndBuild),
         reg('stm32.diag', diagTools),
         reg('stm32.configureTools', configureTools),
-        reg('stm32.selectBuildDir', selectBuildDir)
+        reg('stm32.selectBuildDir', selectBuildDir),
+        reg('stm32.openLog', openLog)
     );
 }
 function deactivate() { }
@@ -594,4 +661,5 @@ module.exports._internals = {
     detectTools, bundlesRoots, resolveTool, versionOf,
     scanTargets, findElfIn, predictElf,
     toolchainPathDirs, checkCompanions, envWithPath, pathPrefix, commandLine, extractErrors,
+    LOG_FILE, log,
 };

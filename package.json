@@ -24,6 +24,7 @@
         "onCommand:stm32.diag",
         "onCommand:stm32.configureTools",
         "onCommand:stm32.selectBuildDir",
+        "onCommand:stm32.openLog",
         "workspaceContains:**/*.ioc",
         "workspaceContains:**/CMakeLists.txt",
         "workspaceContains:**/CMakePresets.json"
@@ -46,6 +47,10 @@
             {
                 "command": "stm32.selectBuildDir",
                 "title": "STM32: 选择构建目录"
+            },
+            {
+                "command": "stm32.openLog",
+                "title": "STM32: 打开插件日志"
             }
         ],
         "configuration": {
