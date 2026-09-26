@@ -125,6 +125,26 @@ code --install-extension /tmp/stm32-flash-button.vsix
 
 ## 变更记录
 
+### v1.0.4
+- **中英双语**：界面与终端输出全部跟随 VS Code 的显示语言（英文系统显示英文，中文系统显示中文）
+  命令面板标题、设置描述、状态栏按钮与悬停提示、弹窗与终端提示均已本地化
+- 刻意不翻译的部分：`[STM32-RESULT]` / `[STM32-ERROR]` / `[STM32-WARN]` / `[STM32-HINT]` 等标记（机器与 AI 靠它抓取）、
+  终端名称「STM32 编译烧录」（复用它才能保留历史输出）、`keywords` 里的中文搜索词
+
+### v1.0.3
+- **新增快捷键**：`Ctrl+Alt+B` 编译并烧录、`Ctrl+Alt+F` 只烧录（不编译）；macOS 对应 `Cmd+Alt+B` / `Cmd+Alt+F`
+- 新增命令 `STM32: 只烧录（不编译）`：跳过编译步骤，也不再要求 cmake 与 `objcopy` / `size`；
+  若构建目录里没有已编译的 `.elf`，会明确报错并提示改用 `Ctrl+Alt+B`
+- 终端新增一行 `[STM32] mode: …`（中文界面为 `模式: …`），明确本次是 编译 + 烧录 / 只烧录 / 只编译
+
+### v1.0.2
+- 补上扩展图标（此前包内没有图标文件，Marketplace 与扩展面板只能显示默认占位图）
+
+### v1.0.1
+- **扩展 ID 变更**：`conductance-lab.stm32-flash-button` → `conductance-lab.stm32-oneclick-flash`，
+  显示名定为 **STM32 One-Click Build & Flash**（原名称在 Marketplace 上已被永久保留，无法使用）
+  > ⚠️ 新旧 ID 不同，VS Code 会视为两个扩展：升级时请卸载旧版，否则左下角会出现两个按钮
+
 ### v1.0.0（重写）
 - **[根因修复]** 构建前把工具链目录注入 `PATH`（终端 `env` + 命令内联 `set`/`export` 双保险），
   修复「CMake 模板把 `CMAKE_OBJCOPY` / `CMAKE_SIZE` 写成裸文件名 → POST_BUILD 找不到 `arm-none-eabi-objcopy` →

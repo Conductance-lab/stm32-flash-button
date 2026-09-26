@@ -117,6 +117,26 @@ When the toolchain cannot be detected, the extension shows a dialog and opens `s
 
 ## Changelog
 
+### v1.0.4
+- **Bilingual**: the UI and all terminal output follow the VS Code display language (English by default, Simplified Chinese on a Chinese VS Code).
+  Command Palette titles, setting descriptions, the status bar item and its tooltip, dialogs and terminal messages are all localized.
+- Intentionally left untranslated: the `[STM32-RESULT]` / `[STM32-ERROR]` / `[STM32-WARN]` / `[STM32-HINT]` markers (tools and AI rely on them),
+  the terminal name `STM32 编译烧录` (reusing it is what keeps the history) and the Chinese search keywords.
+
+### v1.0.3
+- **New shortcuts**: `Ctrl+Alt+B` build & flash, `Ctrl+Alt+F` flash only (no build); on macOS `Cmd+Alt+B` / `Cmd+Alt+F`.
+- New command `STM32: Flash Only (No Build)`: skips the build step and no longer requires cmake or `objcopy` / `size`;
+  if the build directory has no `.elf` yet it fails with a clear message telling you to use `Ctrl+Alt+B` instead.
+- The terminal prints a `[STM32] mode: …` line so you always know whether the run was build + flash, flash only or build only.
+
+### v1.0.2
+- Added the extension icon (there was no icon file before, so the Marketplace and the Extensions view fell back to the default placeholder).
+
+### v1.0.1
+- **Extension ID changed**: `conductance-lab.stm32-flash-button` → `conductance-lab.stm32-oneclick-flash`,
+  with the display name **STM32 One-Click Build & Flash** (the old name is permanently reserved on the Marketplace).
+  > ⚠️ The old and the new ID are different extensions: uninstall the old one when upgrading, otherwise you end up with two status bar buttons.
+
 ### v1.0.0 (rewrite)
 - **[Root cause]** Inject the toolchain directories into `PATH` before building (both via terminal `env` and an inline `set`/`export`), fixing the chain
   "CMake template writes `CMAKE_OBJCOPY` / `CMAKE_SIZE` as bare file names → `POST_BUILD` cannot find `arm-none-eabi-objcopy` → build fails → the `&&` chain means flashing never runs".
