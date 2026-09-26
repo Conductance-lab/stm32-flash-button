@@ -1,5 +1,6 @@
-# STM32 一键编译烧录
+# STM32 One-Click Build & Flash
 
+> **Marketplace 显示名（搜索到的名字）**：`STM32 One-Click Build & Flash`（中文关键词依旧可搜「一键编译烧录」）
 > 扩展 ID：`conductance-lab.stm32-oneclick-flash`（仓库名仍为 `stm32-flash-button`）
 > Marketplace 的扩展 `name` 是**全局唯一**、而且一旦被移除就**永久保留**的标识：`stm32-flash-button`
 > 已被占用（搜不到任何在用扩展，属于已删除记录），所以上架时改用 `stm32-oneclick-flash`。
@@ -55,7 +56,7 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 
 **从 Marketplace 安装（推荐）：**
 
-在 VS Code 扩展面板搜索 **STM32 一键编译烧录**，或命令行：
+在 VS Code 扩展面板搜索 **STM32 One-Click Build & Flash**（或搜「一键编译烧录」），或命令行：
 ```bash
 code --install-extension conductance-lab.stm32-oneclick-flash
 ```
@@ -126,8 +127,8 @@ code --install-extension /tmp/stm32-flash-button.vsix
 
 ### v1.0.1
 - **扩展 ID 变更**：`conductance-lab.stm32-flash-button` → `conductance-lab.stm32-oneclick-flash`，
-  以便上架 VS Code Marketplace（Marketplace 要求扩展 `name` 全局唯一，且被移除的名称永久保留，原名已无法使用）；
-  `displayName`「STM32 一键编译烧录」保持不变
+  以便上架 VS Code Marketplace（Marketplace 要求扩展 `name` 全局唯一，且被移除的名称永久保留，原名已无法使用）
+- **displayName 改为 `STM32 One-Click Build & Flash`**（中文关键词「一键编译烧录」已加入 keywords，搜索仍可命中）
   > ⚠️ 从旧 VSIX 升级的用户：新旧 ID 不同，会被视为两个扩展，装上新的之后请手动卸载旧的
 - 首次上架 VS Code Marketplace，可直接在扩展面板搜索安装
 - `package.json` 补充 `repository` / `homepage` / `bugs` 元数据
