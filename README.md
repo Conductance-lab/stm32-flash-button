@@ -77,6 +77,7 @@ code --install-extension /tmp/stm32-flash-button.vsix
 1. 先安装 ST 官方扩展并打开 STM32 CMake 工程（含 `CMakeLists.txt`，且/或含任意 `*.ioc` / `CMakePresets.json`）
 2. 点状态栏 **🚀 编译并烧录**，或命令面板 `STM32: 一键编译并烧录`
    > 点击后会**先自动保存所有未保存的更改**，再执行编译与烧录；若某个文件保存失败（只读 / 被占用），会中止本次编译烧录并提示。
+   > 快捷键：`Ctrl+Alt+B` 编译并烧录；`Ctrl+Alt+F` 只烧录（不编译，需要已有编译好的固件）
 3. 结果/报错输出在终端「STM32 编译烧录」；自检用 `STM32: 终端自检(工具识别)`
    > 命令末尾会打印 `[STM32-RESULT] OK`（成功）或 `[STM32-RESULT] FAIL`（失败），便于快速判断
 4. 构建目录有多个（`build/Debug`、`build/Release`）时会弹选择框，选一次即记住；

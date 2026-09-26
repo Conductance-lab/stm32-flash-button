@@ -2,6 +2,8 @@
 // 点击状态栏按钮 → 在 VS Code 集成终端「STM32 编译烧录」里执行真实命令；
 // 工具未识别 / 执行报错都以清晰文本输出到该终端，便于人 / AI 提取、复现与迭代修复。
 //
+// 快捷键: Ctrl+Alt+B = 编译并烧录, Ctrl+Alt+F = 只烧录（不编译）
+//
 // ── v1.0.0 重写（2026-09-14）──────────────────────────────────────────────
 //  [根因修复] 构建前把工具链目录注入 PATH。
 //      CMake 工程模板（cmake/gcc-arm-none-eabi.cmake）把 CMAKE_OBJCOPY / CMAKE_SIZE 写成
@@ -493,11 +495,12 @@ async function saveAllBeforeBuild(term) {
 let _lastInvoke = 0;
 // 外层只负责「兜底」：把任何异常清楚地同时打到终端和日志文件，并且不吞掉。
 // （之前异常会被 catch 成弹窗，用户关掉后终端就停在原地，看起来像卡死。）
-async function flashAndBuild() {
+async function flashAndBuild(opts) {
+    const flashOnly = !!(opts && opts.flashOnly);
     const run = Date.now().toString(36).slice(-5);
-    log('=== run ' + run + ' start ===', 'vscode=' + vscode.version, 'platform=' + process.platform);
+    log('=== run ' + run + ' start ===', 'flashOnly=' + flashOnly, 'vscode=' + vscode.version, 'platform=' + process.platform);
     try {
-        await doFlashAndBuild(run);
+        await doFlashAndBuild(run, flashOnly);
         log(run, 'done');
     } catch (e) {
         const msg = (e && e.message) || String(e);
@@ -513,7 +516,7 @@ async function flashAndBuild() {
     }
 }
 
-async function doFlashAndBuild(run) {
+async function doFlashAndBuild(run, flashOnly) {
     const root = wsRoot();
     if (!root) { vscode.window.showErrorMessage('请先打开 STM32 工程文件夹'); return; }
     const rootPath = wsRootPath();
@@ -529,6 +532,8 @@ async function doFlashAndBuild(run) {
     const cfg = config();
     const tools = detectTools();
     const dirs = toolchainPathDirs(tools);
+    // 只烧录模式（Ctrl+Alt+F）忽略 buildOnly 设置，强制走烧录
+    const buildOnly = !flashOnly && !!cfg.get('buildOnly', false);
     log(run, 'tools=' + JSON.stringify(tools));
     log(run, 'pathDirs=' + JSON.stringify(dirs));
     const term = getTerm(dirs, !!cfg.get('clearBeforeRun', false));
@@ -543,24 +548,27 @@ async function doFlashAndBuild(run) {
     if (!await saveAllBeforeBuild(term)) { log(run, 'abort: 保存失败'); return; }
 
     // 2) 工具识别
+    termLine(term, '[STM32] 模式: ' + (flashOnly ? '只烧录（不编译）' : buildOnly ? '只编译（不烧录）' : '编译 + 烧录'));
     termLine(term, '[STM32] 工具识别: cmake=' + okMark(tools.cmake) + ' ninja=' + okMark(tools.ninja) +
         ' gcc=' + okMark(tools.gcc) + ' programmer=' + okMark(tools.programmer));
     if (tools.gcc) termLine(term, '[STM32] 工具链 bin 待前置到 PATH: ' + toolchainDirOf(tools.gcc));
 
-    // ★ 关键检查：objcopy / size 是构建期被「裸文件名」调用的，找不到就一定构建失败
-    let comp = { missing: [] };
-    try { comp = checkCompanions(tools); }
-    catch (e) { log(run, 'checkCompanions 失败', e); termLine(term, '[STM32-WARN] 检查 objcopy/size 时出错: ' + ((e && e.message) || e)); }
-    log(run, 'companions missing=' + JSON.stringify(comp.missing));
-    if (comp.missing.length) {
-        termLine(term, '[STM32-ERROR] 找不到构建期伴随程序: ' + comp.missing.join(', '));
-        termLine(term, '[STM32-HINT] 原因: CMake 工程模板把 CMAKE_OBJCOPY/CMAKE_SIZE 写成裸文件名，构建时必须能从 PATH 找到它们；否则 POST_BUILD 直接 FAILED，后面的烧录也不会执行');
-        termLine(term, '[STM32-HINT] 解决: ① 确认 arm-none-eabi-gcc 与 objcopy/size 在同一 bin 目录 ② 用 stm32flash.extraPathDirs 填该目录 ③ 用 stm32flash.toolchainDirs 手动指定');
+    // ★ 关键检查：objcopy / size 是构建期被「裸文件名」调用的，找不到就一定构建失败（只烧录不构建，跳过）
+    if (!flashOnly) {
+        let comp = { missing: [] };
+        try { comp = checkCompanions(tools); }
+        catch (e) { log(run, 'checkCompanions 失败', e); termLine(term, '[STM32-WARN] 检查 objcopy/size 时出错: ' + ((e && e.message) || e)); }
+        log(run, 'companions missing=' + JSON.stringify(comp.missing));
+        if (comp.missing.length) {
+            termLine(term, '[STM32-ERROR] 找不到构建期伴随程序: ' + comp.missing.join(', '));
+            termLine(term, '[STM32-HINT] 原因: CMake 工程模板把 CMAKE_OBJCOPY/CMAKE_SIZE 写成裸文件名，构建时必须能从 PATH 找到它们；否则 POST_BUILD 直接 FAILED，后面的烧录也不会执行');
+            termLine(term, '[STM32-HINT] 解决: ① 确认 arm-none-eabi-gcc 与 objcopy/size 在同一 bin 目录 ② 用 stm32flash.extraPathDirs 填该目录 ③ 用 stm32flash.toolchainDirs 手动指定');
+        }
     }
 
     const miss = [];
-    if (!tools.cmake) miss.push('cmake');
-    if (!cfg.get('buildOnly', false) && !tools.programmer) miss.push('STM32CubeProgrammer CLI');
+    if (!flashOnly && !tools.cmake) miss.push('cmake');
+    if (!buildOnly && !tools.programmer) miss.push('STM32CubeProgrammer CLI');
     log(run, 'missing tools=' + JSON.stringify(miss));
     if (miss.length) {
         termLine(term, '[STM32-ERROR] 未识别到工具: ' + miss.join(', '));
@@ -585,14 +593,20 @@ async function doFlashAndBuild(run) {
     const tgt = await pickTarget(rootPath, cands, term, false);
     log(run, 'target=' + JSON.stringify(tgt && { dir: tgt.buildDir, elf: tgt.elf, hasElf: tgt.hasElf }));
     if (!tgt) { log(run, 'abort: 未选择构建目录'); return; }
+    if (flashOnly && !tgt.hasElf) {
+        log(run, 'abort: 只烧录模式下该目录没有固件');
+        termLine(term, '[STM32-ERROR] 只烧录模式需要已编译好的固件，但 ' + relLabel(rootPath, tgt.buildDir) + ' 里没有 .elf');
+        termLine(term, '[STM32-HINT] 请先编译一次，或改用 Ctrl+Alt+B「编译并烧录」');
+        vscode.window.showErrorMessage('该构建目录里没有已编译的固件，无法只烧录');
+        return;
+    }
 
     // 4) 拼命令: PATH 注入 → 编译 → 烧录 → 结果哨兵
-    const buildOnly = !!cfg.get('buildOnly', false);
     if (!buildOnly) {
         if (tgt.elf && !tgt.hasElf) termLine(term, '[STM32] 该目录尚无固件，本次先编译再烧录，预期固件: ' + tgt.elf);
         if (!tgt.elf) termLine(term, '[STM32-WARN] 无法确定固件路径【缺少 CMakeCache】，本次只编译不烧录');
     }
-    const cmd = commandLine(tools, tgt, dirs, buildOnly, String(cfg.get('programmerArgs', DEFAULT_PROG_ARGS) || ''));
+    const cmd = commandLine(tools, tgt, dirs, buildOnly, String(cfg.get('programmerArgs', DEFAULT_PROG_ARGS) || ''), flashOnly);
     log(run, 'cmd=' + cmd);
 
     termLine(term, '[STM32] 平台 ' + process.platform + ' / shell ' + path.basename(shellPath()) +
@@ -604,9 +618,10 @@ async function doFlashAndBuild(run) {
 }
 
 /* 组装真正发到终端的命令行：chcp → PATH 注入 → 编译 → 烧录 → 结果哨兵 */
-function commandLine(tools, tgt, dirs, buildOnly, progArgs) {
+function commandLine(tools, tgt, dirs, buildOnly, progArgs, flashOnly) {
     const q = p => '"' + String(p).replace(/\\/g, '/') + '"';
-    const steps = [q(tools.cmake) + ' --build ' + q(tgt.buildDir)];
+    const steps = [];
+    if (!flashOnly) steps.push(q(tools.cmake) + ' --build ' + q(tgt.buildDir));
     if (!buildOnly && tools.programmer && tgt.elf) {
         const args = String(progArgs || DEFAULT_PROG_ARGS).replace(/\{elf\}/g, String(tgt.elf).replace(/\\/g, '/'));
         steps.push(q(tools.programmer) + ' ' + args);
@@ -700,6 +715,7 @@ function activate(context) {
 
     context.subscriptions.push(item,
         reg('stm32.flashAndBuild', flashAndBuild),
+        reg('stm32.flashOnly', () => flashAndBuild({ flashOnly: true })),
         reg('stm32.diag', diagTools),
         reg('stm32.configureTools', configureTools),
         reg('stm32.selectBuildDir', selectBuildDir),
