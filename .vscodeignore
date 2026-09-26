@@ -5,3 +5,5 @@
 node_modules/**
 **/*.vsix
 package-lock.json
+# Marketplace 只读取 README.md，英文版无需打进包
+README.en.md
