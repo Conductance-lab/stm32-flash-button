@@ -2,9 +2,14 @@
     "name": "stm32-oneclick-flash",
     "displayName": "STM32 One-Click Build & Flash",
     "description": "STM32 一键编译并烧录：状态栏按钮完成 编译 → 烧录 → 复位运行，自动探测工具链与固件并输出到集成终端",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "conductance-lab",
     "license": "MIT",
+    "icon": "icon.png",
+    "galleryBanner": {
+        "color": "#2563EB",
+        "theme": "dark"
+    },
     "repository": {
         "type": "git",
         "url": "https://github.com/Conductance-lab/stm32-flash-button.git"
