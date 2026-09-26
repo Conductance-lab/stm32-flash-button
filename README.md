@@ -29,6 +29,7 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 > 没装官方扩展时，请把上述工具加入系统 `PATH`，或用下面的设置手动指定。
 
 ## 特性
+- **中英双语**：所有提示文案自动跟随 VS Code 的显示语言（英文系统显示英文，中文系统显示中文）
 - **快捷键**：`Ctrl+Alt+B` 编译并烧录、`Ctrl+Alt+F` 只烧录（不编译）；状态栏按钮等于前者
 - **自动注入工具链 PATH（v1.0.0 关键修复）**：构建前把 `arm-none-eabi-gcc` / ninja / cmake 所在目录前置到 `PATH`。
   很多 CMake 工程模板把 `CMAKE_OBJCOPY` / `CMAKE_SIZE` 写成**裸文件名**（`arm-none-eabi-objcopy` / `arm-none-eabi-size`），

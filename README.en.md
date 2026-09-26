@@ -25,6 +25,7 @@ This extension is **not** a standalone toolchain. It is built on top of the **of
 > Without the official extension, add these tools to your system `PATH`, or configure them manually in the settings below.
 
 ## Features
+- **Bilingual**: every message follows the VS Code display language (English by default, Simplified Chinese when VS Code runs in Chinese).
 - **Keyboard shortcuts**: `Ctrl+Alt+B` build & flash, `Ctrl+Alt+F` flash only (no build). The status bar button is equivalent to the former.
 - **Toolchain PATH injection (key v1.0.0 fix)**: before building, the directories of `arm-none-eabi-gcc` / ninja / cmake are prepended to `PATH`.
   Many CMake templates set `CMAKE_OBJCOPY` / `CMAKE_SIZE` to **bare file names** (`arm-none-eabi-objcopy` / `arm-none-eabi-size`) and CMake does not resolve them to absolute paths — they must be found on `PATH` at build time. Otherwise `POST_BUILD` fails with
@@ -40,7 +41,7 @@ This extension is **not** a standalone toolchain. It is built on top of the **of
 - **Reuses a single terminal** instead of recreating it, so history is preserved and can be copied to an AI / human for analysis.
 - The self-check command verifies that `objcopy` / `size` exist, surfacing "missing build-time companion program" problems early.
 - **File log + error fallback**: every step is written to `%TEMP%\stm32-flash-button.log`; any exception goes to the log, to the terminal (`[STM32-ERROR] internal error: …`) and to a dialog, so the extension never silently stalls.
-  Run `STM32: 打开插件日志` (Open extension log) from the Command Palette to inspect it.
+  Run `STM32: Open Extension Log` from the Command Palette to inspect it.
 
 ## Install
 
@@ -65,15 +66,16 @@ You can also download `stm32-flash-button.vsix` from **Releases**, or use Extens
 
 ## Usage
 1. Install the official ST extension and open an STM32 CMake project (containing `CMakeLists.txt` and/or any `*.ioc` / `CMakePresets.json`).
-2. Click **🚀 编译并烧录** in the status bar, run `STM32: 一键编译并烧录` from the Command Palette, or use a shortcut:
+2. Click **🚀 Build & Flash** in the status bar, run `STM32: Build and Flash` from the Command Palette, or use a shortcut:
    > All unsaved changes are **saved first**, then the build and flash run. If a file cannot be saved (read-only / locked), the run is aborted with a message.
    > Shortcuts: `Ctrl+Alt+B` build & flash; `Ctrl+Alt+F` flash only (no build — requires an already-built firmware).
-3. Results and errors are printed in the terminal titled "STM32 编译烧录"; use `STM32: 终端自检(工具识别)` for a self-check.
+3. Results and errors are printed in the terminal titled "STM32 编译烧录"; use `STM32: Self Check (tool detection)` for a self-check.
    > The command prints `[STM32-RESULT] OK` (success) or `[STM32-RESULT] FAIL` (failure) at the end.
 4. When several build directories exist (`build/Debug`, `build/Release`) a picker appears and your choice is remembered;
-   run `STM32: 选择构建目录` to change it.
+   run `STM32: Select Build Directory` to change it.
 
-> Command Palette entries keep their Chinese titles (the extension UI is Chinese).
+> On a Chinese VS Code the Command Palette entries are shown with Chinese titles, for example `STM32: 一键编译并烧录`.
+> The terminal title stays `STM32 编译烧录` in both languages, because the terminal is reused by name.
 
 ## settings.json (everything is optional)
 ```jsonc
@@ -103,10 +105,10 @@ When the toolchain cannot be detected, the extension shows a dialog and opens `s
 
 ## FAQ
 - **Build fails with `'arm-none-eabi-objcopy' is not recognized...` / `FAILED` at POST_BUILD**
-  → `objcopy` / `size` cannot be found at build time. The extension prepends the gcc directory to `PATH` by default; if your toolchain layout is unusual, put its `bin` directory into `stm32flash.extraPathDirs` and confirm with `STM32: 终端自检(工具识别)` that it prints
-  `构建期伴随程序: objcopy=OK  size=OK`.
+  → `objcopy` / `size` cannot be found at build time. The extension prepends the gcc directory to `PATH` by default; if your toolchain layout is unusual, put its `bin` directory into `stm32flash.extraPathDirs` and confirm with `STM32: Self Check (tool detection)` that it prints
+  `build-time companions: objcopy=OK size=OK` (on a Chinese UI: `构建期伴随程序: objcopy=OK  size=OK`).
 - **The button built but did not flash** → check whether the terminal shows `[STM32-RESULT] OK`. If the build directory has no `.elf`, or `CMakeCache.txt` is missing so the firmware path cannot be inferred, the run degrades to build-only (with a `[STM32-WARN]` in the terminal).
-- **Toolchain not detected** → make sure the official ST extension is installed, or configure the settings above; use `STM32: 终端自检(工具识别)` to diagnose.
+- **Toolchain not detected** → make sure the official ST extension is installed, or configure the settings above; use `STM32: Self Check (tool detection)` to diagnose.
 - **Several versions of the same tool** → the extension automatically picks the highest version.
 - **Don't want to interrupt the previous command in the terminal** → when the terminal is busy the extension asks before continuing.
 - **macOS / Linux: toolchain not detected** → official tool bundles are scattered; specify the paths manually in the settings.
@@ -124,7 +126,7 @@ When the toolchain cannot be detected, the extension shows a dialog and opens `s
 - **[Robustness]** A single terminal is reused to keep history; a `[STM32-RESULT] OK/FAIL` sentinel is printed at the end; on VS Code 1.93+ the exit code **and output** are read through shell integration, and key error lines are extracted with a one-click copy action.
 - **[Cosmetics]** `chcp 65001` is issued before the first use of the terminal (it used to run last, so the first run was mojibake); hint text no longer contains `()` `=>` characters that cmd escapes into `^( )` `=^>`.
 - **[Enhancement]** The self-check now verifies `objcopy` / `size`, lists the directories to be injected into `PATH`, and lists the build directory candidates.
-- **[Diagnosability]** New file log `%TEMP%\stm32-flash-button.log` (per-step timings, tools, candidates, final command, exception stack). Exceptions go to both the terminal and the log (no longer dialog-only), plus a new `STM32: 打开插件日志` command.
+- **[Diagnosability]** New file log `%TEMP%\stm32-flash-button.log` (per-step timings, tools, candidates, final command, exception stack). Exceptions go to both the terminal and the log (no longer dialog-only), plus a new `STM32: Open Extension Log` command.
 - **[Root cause]** Workspace path resolution now falls back through `fsPath` → `uri.fsPath` → `uri.path`. In some environments (virtual / remote workspaces) `WorkspaceFolder.fsPath` is `undefined` and the old code threw from `path.resolve(undefined)`, which was swallowed and surfaced as "no CMake build directory found".
 - **[Mojibake]** The terminal codepage is switched in stages: UTF-8 (`chcp 65001`) for the Chinese banner, then back to the system ANSI codepage (e.g. 936) for build/flash, because STM32CubeProgrammer writes its progress/status text in GBK and it decoded to `�` under 65001.
-- **[New]** Settings `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun`, and the command `STM32: 选择构建目录`.
+- **[New]** Settings `stm32flash.extraPathDirs` / `buildDir` / `programmerArgs` / `buildOnly` / `clearBeforeRun`, and the command `STM32: Select Build Directory`.

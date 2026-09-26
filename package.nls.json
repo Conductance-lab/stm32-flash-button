@@ -1,0 +1,17 @@
+{
+    "description": "STM32 one-click build and flash: a status bar button runs build → flash → reset and run, auto-detecting the toolchain and the firmware and streaming everything to the integrated terminal",
+    "cmd.flashAndBuild.title": "STM32: Build and Flash",
+    "cmd.diag.title": "STM32: Self Check (tool detection)",
+    "cmd.configureTools.title": "STM32: Open settings.json to Configure Tool Paths",
+    "cmd.selectBuildDir.title": "STM32: Select Build Directory",
+    "cmd.openLog.title": "STM32: Open Extension Log",
+    "cmd.flashOnly.title": "STM32: Flash Only (No Build)",
+    "config.title": "STM32 One-Click Build & Flash",
+    "config.programmer.description": "Optional: manually specify the absolute path to the STM32CubeProgrammer CLI",
+    "config.toolchainDirs.description": "Optional: manually specify the directories containing cmake / ninja / arm-none-eabi-gcc",
+    "config.extraPathDirs.description": "Optional: extra directories prepended to PATH. At build time objcopy / size are invoked by bare file name - the CMake template sets CMAKE_OBJCOPY / CMAKE_SIZE to arm-none-eabi-objcopy / arm-none-eabi-size - so if they are reported as not found, put their bin directory here",
+    "config.buildDir.description": "Remembered build directory, relative to the workspace, for example build/Debug. Written automatically after you pick one when Debug/Release both exist; leave empty to pick automatically each time - a picker is shown when there are several candidates",
+    "config.programmerArgs.description": "Programmer arguments; {elf} is replaced with the absolute firmware path. Default: connect over SWD, write and verify, then reset and run",
+    "config.buildOnly.description": "Build only, do not flash - useful to verify that the project builds when the board is not at hand",
+    "config.clearBeforeRun.description": "Clear the terminal before each run. Default false, which keeps the previous output for review"
+}

@@ -1,8 +1,8 @@
 {
     "name": "stm32-oneclick-flash",
     "displayName": "STM32 One-Click Build & Flash",
-    "description": "STM32 一键编译并烧录：状态栏按钮完成 编译 → 烧录 → 复位运行，自动探测工具链与固件并输出到集成终端",
-    "version": "1.0.3",
+    "description": "%description%",
+    "version": "1.0.4",
     "publisher": "conductance-lab",
     "license": "MIT",
     "icon": "icon.png",
@@ -50,31 +50,32 @@
         "workspaceContains:**/CMakePresets.json"
     ],
     "main": "./extension.js",
+    "l10n": "./l10n",
     "contributes": {
         "commands": [
             {
                 "command": "stm32.flashAndBuild",
-                "title": "STM32: 一键编译并烧录"
+                "title": "%cmd.flashAndBuild.title%"
             },
             {
                 "command": "stm32.diag",
-                "title": "STM32: 终端自检(工具识别)"
+                "title": "%cmd.diag.title%"
             },
             {
                 "command": "stm32.configureTools",
-                "title": "STM32: 打开 settings.json 配置工具路径"
+                "title": "%cmd.configureTools.title%"
             },
             {
                 "command": "stm32.selectBuildDir",
-                "title": "STM32: 选择构建目录"
+                "title": "%cmd.selectBuildDir.title%"
             },
             {
                 "command": "stm32.openLog",
-                "title": "STM32: 打开插件日志"
+                "title": "%cmd.openLog.title%"
             },
             {
                 "command": "stm32.flashOnly",
-                "title": "STM32: 只烧录（不编译）"
+                "title": "%cmd.flashOnly.title%"
             }
         ],
         "keybindings": [
@@ -90,44 +91,44 @@
             }
         ],
         "configuration": {
-            "title": "STM32 一键编译烧录",
+            "title": "%config.title%",
             "properties": {
                 "stm32flash.programmer": {
                     "type": "string",
                     "default": "",
-                    "description": "可选：手动指定 STM32CubeProgrammer CLI 绝对路径"
+                    "description": "%config.programmer.description%"
                 },
                 "stm32flash.toolchainDirs": {
                     "type": "array",
                     "items": { "type": "string" },
                     "default": [],
-                    "description": "可选：手动指定 cmake / ninja / arm-none-eabi-gcc 所在目录"
+                    "description": "%config.toolchainDirs.description%"
                 },
                 "stm32flash.extraPathDirs": {
                     "type": "array",
                     "items": { "type": "string" },
                     "default": [],
-                    "description": "可选：额外前置到 PATH 的目录。构建期 objcopy / size 是被『裸文件名』调用的（CMake 模板把 CMAKE_OBJCOPY / CMAKE_SIZE 写成了 arm-none-eabi-objcopy / arm-none-eabi-size），若报找不到它们，把对应 bin 目录填这里"
+                    "description": "%config.extraPathDirs.description%"
                 },
                 "stm32flash.buildDir": {
                     "type": "string",
                     "default": "",
-                    "description": "记住的构建目录（相对工作区，例如 build/Debug）。在 Debug/Release 同时存在时由插件选择后自动写入；留空则每次自动选（多个候选会弹选择框）"
+                    "description": "%config.buildDir.description%"
                 },
                 "stm32flash.programmerArgs": {
                     "type": "string",
                     "default": "-c port=SWD -w \"{elf}\" -v -rst",
-                    "description": "烧录器参数，{elf} 会替换为固件绝对路径。默认：SWD 连接、写入并校验、烧完复位运行"
+                    "description": "%config.programmerArgs.description%"
                 },
                 "stm32flash.buildOnly": {
                     "type": "boolean",
                     "default": false,
-                    "description": "只编译不烧录（板子不在手边时用来验证工程能否构建）"
+                    "description": "%config.buildOnly.description%"
                 },
                 "stm32flash.clearBeforeRun": {
                     "type": "boolean",
                     "default": false,
-                    "description": "点击按钮时先清屏。默认 false，保留历史输出便于回看"
+                    "description": "%config.clearBeforeRun.description%"
                 }
             }
         }

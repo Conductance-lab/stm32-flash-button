@@ -1,0 +1,17 @@
+{
+    "description": "STM32 一键编译并烧录：状态栏按钮完成 编译 → 烧录 → 复位运行，自动探测工具链与固件并输出到集成终端",
+    "cmd.flashAndBuild.title": "STM32: 一键编译并烧录",
+    "cmd.diag.title": "STM32: 终端自检(工具识别)",
+    "cmd.configureTools.title": "STM32: 打开 settings.json 配置工具路径",
+    "cmd.selectBuildDir.title": "STM32: 选择构建目录",
+    "cmd.openLog.title": "STM32: 打开插件日志",
+    "cmd.flashOnly.title": "STM32: 只烧录（不编译）",
+    "config.title": "STM32 一键编译烧录",
+    "config.programmer.description": "可选：手动指定 STM32CubeProgrammer CLI 绝对路径",
+    "config.toolchainDirs.description": "可选：手动指定 cmake / ninja / arm-none-eabi-gcc 所在目录",
+    "config.extraPathDirs.description": "可选：额外前置到 PATH 的目录。构建期 objcopy / size 是被『裸文件名』调用的（CMake 模板把 CMAKE_OBJCOPY / CMAKE_SIZE 写成了 arm-none-eabi-objcopy / arm-none-eabi-size），若报找不到它们，把对应 bin 目录填这里",
+    "config.buildDir.description": "记住的构建目录（相对工作区，例如 build/Debug）。在 Debug/Release 同时存在时由插件选择后自动写入；留空则每次自动选（多个候选会弹选择框）",
+    "config.programmerArgs.description": "烧录器参数，{elf} 会替换为固件绝对路径。默认：SWD 连接、写入并校验、烧完复位运行",
+    "config.buildOnly.description": "只编译不烧录（板子不在手边时用来验证工程能否构建）",
+    "config.clearBeforeRun.description": "点击按钮时先清屏。默认 false，保留历史输出便于回看"
+}
