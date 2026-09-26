@@ -69,13 +69,13 @@ You can also download `stm32-flash-button.vsix` from **Releases**, or use Extens
 2. Click **🚀 Build & Flash** in the status bar, run `STM32: Build and Flash` from the Command Palette, or use a shortcut:
    > All unsaved changes are **saved first**, then the build and flash run. If a file cannot be saved (read-only / locked), the run is aborted with a message.
    > Shortcuts: `Ctrl+Alt+B` build & flash; `Ctrl+Alt+F` flash only (no build — requires an already-built firmware).
-3. Results and errors are printed in the terminal titled "STM32 编译烧录"; use `STM32: Self Check (tool detection)` for a self-check.
+3. Results and errors are printed in the terminal titled "STM32 Build & Flash"; use `STM32: Self Check (tool detection)` for a self-check.
    > The command prints `[STM32-RESULT] OK` (success) or `[STM32-RESULT] FAIL` (failure) at the end.
 4. When several build directories exist (`build/Debug`, `build/Release`) a picker appears and your choice is remembered;
    run `STM32: Select Build Directory` to change it.
 
 > On a Chinese VS Code the Command Palette entries are shown with Chinese titles, for example `STM32: 一键编译并烧录`.
-> The terminal title stays `STM32 编译烧录` in both languages, because the terminal is reused by name.
+> The terminal is titled `STM32 Build & Flash` (Chinese UI: `STM32 编译烧录`) and is reused by name, so its history is preserved.
 
 ## settings.json (everything is optional)
 ```jsonc
@@ -117,11 +117,16 @@ When the toolchain cannot be detected, the extension shows a dialog and opens `s
 
 ## Changelog
 
+### v1.0.5
+- **Fixed**: on an English UI the terminal name and the status bar tooltip still leaked Chinese - the terminal name now follows the display language
+  (`STM32 Build & Flash` in English, `STM32 编译烧录` in Chinese), so English mode shows no Chinese anywhere in the UI or the terminal.
+- Added **STM32 Flash** to the keywords to improve search hits.
+
 ### v1.0.4
 - **Bilingual**: the UI and all terminal output follow the VS Code display language (English by default, Simplified Chinese on a Chinese VS Code).
   Command Palette titles, setting descriptions, the status bar item and its tooltip, dialogs and terminal messages are all localized.
-- Intentionally left untranslated: the `[STM32-RESULT]` / `[STM32-ERROR]` / `[STM32-WARN]` / `[STM32-HINT]` markers (tools and AI rely on them),
-  the terminal name `STM32 编译烧录` (reusing it is what keeps the history) and the Chinese search keywords.
+- Intentionally left untranslated: the `[STM32-RESULT]` / `[STM32-ERROR]` / `[STM32-WARN]` / `[STM32-HINT]` markers (tools and AI rely on them)
+  and the Chinese search keywords; the terminal name follows the display language since v1.0.5.
 
 ### v1.0.3
 - **New shortcuts**: `Ctrl+Alt+B` build & flash, `Ctrl+Alt+F` flash only (no build); on macOS `Cmd+Alt+B` / `Cmd+Alt+F`.

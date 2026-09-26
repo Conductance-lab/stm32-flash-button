@@ -31,16 +31,10 @@ const child_process = require('child_process');
 
 const IS_WIN = process.platform === 'win32';
 const EXE = IS_WIN ? '.exe' : '';
-const TERM_NAME = 'STM32 编译烧录';
-const RESULT_MARK = '[STM32-RESULT]';
-const DEFAULT_PROG_ARGS = '-c port=SWD -w "{elf}" -v -rst';
-const SCAN_DEPTH = 4;                 // 从工作区根向下递归的深度
-const SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.vs', '.cache', 'node_modules', '.venv', 'venv', '__pycache__', 'dist']);
-const LOG_FILE = path.join(os.tmpdir(), 'stm32-flash-button.log');
-const LOG_MAX = 512 * 1024;
 // 国际化：所有“用户可见”的文案都走 t()。英文是源语言，中文翻译在 l10n/bundle.l10n.zh-cn.json，
 // 由 VS Code 根据显示语言自动加载（vscode.l10n，需 VS Code >= 1.73）。
-// 注意：不要把局部变量命名为 t，否则会把翻译函数遮蔽掉。
+// 必须定义在所有文案常量（如 TERM_NAME）之前。
+// 注意：不要把局部变量或参数命名为 t，否则会把翻译函数遮蔽掉。
 const t = (msg, ...args) => {
     try {
         if (vscode.l10n && typeof vscode.l10n.t === 'function') return vscode.l10n.t(msg, ...args);
@@ -48,6 +42,14 @@ const t = (msg, ...args) => {
     // 拿不到 l10n API 时也要把 {0} 占位符填上，避免终端里出现裸占位符
     return String(msg).replace(/\{(\d+)\}/g, (s, i) => (args[i] === undefined ? s : String(args[i])));
 };
+// 终端名也跟随显示语言，英文界面不再出现中文；名字固定才能复用终端、保留历史输出
+const TERM_NAME = t('STM32 Build & Flash');
+const RESULT_MARK = '[STM32-RESULT]';
+const DEFAULT_PROG_ARGS = '-c port=SWD -w "{elf}" -v -rst';
+const SCAN_DEPTH = 4;                 // 从工作区根向下递归的深度
+const SKIP_DIRS = new Set(['.git', '.hg', '.svn', '.vs', '.cache', 'node_modules', '.venv', 'venv', '__pycache__', 'dist']);
+const LOG_FILE = path.join(os.tmpdir(), 'stm32-flash-button.log');
+const LOG_MAX = 512 * 1024;
 // 文件日志：终端可能被弹窗打断、被刷屏，出问题时直接看这个文件最省事。
 // 任何一步报错都会被记下来，不会再出现「终端打了几行就没下文」的鬼故事。
 function log() {

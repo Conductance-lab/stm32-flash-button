@@ -73,6 +73,7 @@
     "Available settings: \"stm32flash.toolchainDirs\" - directories containing cmake/ninja/gcc; \"stm32flash.extraPathDirs\" - extra directories prepended to PATH, for example where objcopy/size live; \"stm32flash.programmer\" - absolute path to the programmer; \"stm32flash.buildDir\" - default build directory. Save the file and click the button again.": "可配置: \"stm32flash.toolchainDirs\"（cmake/ninja/gcc 所在目录数组）、\"stm32flash.extraPathDirs\"（额外注入 PATH 的目录，如 objcopy/size 所在目录）、\"stm32flash.programmer\"（烧录器绝对路径）、\"stm32flash.buildDir\"（默认构建目录）。保存后重新点击按钮。",
     "Cannot open the log file {0}: {1}": "无法打开日志文件 {0}：{1}",
     "Build & Flash": "编译并烧录",
+    "STM32 Build & Flash": "STM32 编译烧录",
     "Build → Flash → reset and run": "编译 → 烧录 → 复位运行",
     "commands and the full output are in the \"{0}\" terminal": "命令与完整输出都在「{0}」终端",
     "run \"STM32: Self Check\" from the Command Palette to diagnose": "命令面板可执行「STM32: 终端自检」做诊断"

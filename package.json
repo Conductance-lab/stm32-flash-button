@@ -2,7 +2,7 @@
     "name": "stm32-oneclick-flash",
     "displayName": "STM32 One-Click Build & Flash",
     "description": "%description%",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "publisher": "conductance-lab",
     "license": "MIT",
     "icon": "icon.png",
@@ -34,6 +34,7 @@
         "one-click",
         "stm32cubeide",
         "arm-none-eabi",
+        "STM32 Flash",
         "一键编译烧录",
         "烧录",
         "嵌入式"
