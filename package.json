@@ -1,10 +1,18 @@
 {
-    "name": "stm32-flash-button",
+    "name": "stm32-oneclick-flash",
     "displayName": "STM32 一键编译烧录",
     "description": "状态栏一键『编译并烧录』：自动探测工具与固件、自动注入工具链 PATH，命令与报错输出到集成终端",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "publisher": "conductance-lab",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Conductance-lab/stm32-flash-button.git"
+    },
+    "homepage": "https://github.com/Conductance-lab/stm32-flash-button#readme",
+    "bugs": {
+        "url": "https://github.com/Conductance-lab/stm32-flash-button/issues"
+    },
     "engines": {
         "vscode": "^1.75.0"
     },

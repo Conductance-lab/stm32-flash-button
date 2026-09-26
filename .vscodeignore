@@ -1,0 +1,7 @@
+# 打包进 VSIX 时需要排除的内容
+.vscode/**
+.git/**
+.github/**
+node_modules/**
+**/*.vsix
+package-lock.json

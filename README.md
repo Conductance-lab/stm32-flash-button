@@ -1,4 +1,8 @@
-# STM32 一键编译烧录（stm32-flash-button）
+# STM32 一键编译烧录
+
+> 扩展 ID：`conductance-lab.stm32-oneclick-flash`（仓库名仍为 `stm32-flash-button`）
+> Marketplace 的扩展 `name` 是**全局唯一**、而且一旦被移除就**永久保留**的标识：`stm32-flash-button`
+> 已被占用（搜不到任何在用扩展，属于已删除记录），所以上架时改用 `stm32-oneclick-flash`。
 
 VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 STM32 工具链与本工作区固件，
 在集成终端一键完成 **编译 → 烧录 → 复位运行**。
@@ -49,7 +53,14 @@ VS Code **状态栏左侧**的「🚀 编译并烧录」按钮：自动探测 ST
 
 ## 安装
 
-**Windows（PowerShell，一键）：**
+**从 Marketplace 安装（推荐）：**
+
+在 VS Code 扩展面板搜索 **STM32 一键编译烧录**，或命令行：
+```bash
+code --install-extension conductance-lab.stm32-oneclick-flash
+```
+
+**从 VSIX 安装（Windows，PowerShell 一键）：**
 ```powershell
 iwr "https://github.com/Conductance-lab/stm32-flash-button/releases/latest/download/stm32-flash-button.vsix" -OutFile "$env:TEMP\stm32-flash-button.vsix"; code --install-extension "$env:TEMP\stm32-flash-button.vsix"
 ```
@@ -112,6 +123,15 @@ code --install-extension /tmp/stm32-flash-button.vsix
 - 烧录 `Unable to get core ID` → 板子独立供电 / SWD 接线共地 / 或 CubeMX 的 SYS→Debug 设成了 `No Debug`（会关闭 SWD），此时把 BOOT0 拨到 1 可恢复连接
 
 ## 变更记录
+
+### v1.0.1
+- **扩展 ID 变更**：`conductance-lab.stm32-flash-button` → `conductance-lab.stm32-oneclick-flash`，
+  以便上架 VS Code Marketplace（Marketplace 要求扩展 `name` 全局唯一，且被移除的名称永久保留，原名已无法使用）；
+  `displayName`「STM32 一键编译烧录」保持不变
+  > ⚠️ 从旧 VSIX 升级的用户：新旧 ID 不同，会被视为两个扩展，装上新的之后请手动卸载旧的
+- 首次上架 VS Code Marketplace，可直接在扩展面板搜索安装
+- `package.json` 补充 `repository` / `homepage` / `bugs` 元数据
+- 新增 `.vscodeignore`，打包内容更干净
 
 ### v1.0.0（重写）
 - **[根因修复]** 构建前把工具链目录注入 `PATH`（终端 `env` + 命令内联 `set`/`export` 双保险），
